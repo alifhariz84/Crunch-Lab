@@ -67,6 +67,81 @@
         .opt-btn.active { background: var(--orange); color: white; border-color: var(--orange); }
 
         #receipt-print { display: none; }
+
+
+        /* RESPONSIVE LAYOUT: PC / TABLET / PHONE */
+        .mobile-cart-bar { display: none; }
+        .table-wrap { width: 100%; overflow-x: auto; }
+
+        @media (min-width: 1101px) {
+            body { flex-direction: row; }
+            .sidebar { flex: 0 0 360px; }
+            .best-grid { grid-template-columns: repeat(3, minmax(220px, 1fr)); }
+        }
+
+        @media (max-width: 1100px) and (min-width: 701px) {
+            body { flex-direction: row; }
+            .sidebar { flex: 0 0 300px; }
+            .sidebar-header { padding: 16px; font-size: 1.5rem; }
+            .sidebar-footer { padding: 14px; }
+            .total-row { font-size: 1.55rem; }
+            .btn-side { padding: 14px; }
+            .header-brand { padding: 16px 22px; }
+            .logo-img { width: 52px; height: 52px; }
+            .view { padding: 18px 22px 92px 22px; }
+            .best-grid { grid-template-columns: repeat(2, minmax(180px, 1fr)); gap: 16px; }
+            .best-card { padding: 18px; }
+            .product-photo, .product-photo-empty { height: 125px; }
+            .best-card strong { font-size: 1.45rem; }
+            .best-price-tag { font-size: 1.45rem; }
+            .stats-grid { grid-template-columns: repeat(3, minmax(150px, 1fr)); }
+            .bottom-nav { padding: 12px 22px; gap: 10px; }
+        }
+
+        @media (max-width: 700px) {
+            html, body { height: 100%; }
+            body { display: block; overflow: hidden; background-attachment: scroll; }
+            .sidebar { position: fixed; left: 0; right: 0; bottom: 74px; top: auto; width: 100%; max-height: 48vh; flex: none; border-right: 0; border-top: 1px solid #e5e7eb; border-radius: 24px 24px 0 0; transform: translateY(calc(100% - 62px)); transition: transform .22s ease; box-shadow: 0 -8px 24px rgba(0,0,0,.18); z-index: 1200; }
+            .sidebar.open { transform: translateY(0); }
+            .sidebar-header { padding: 14px; font-size: 1.4rem; cursor: pointer; }
+            .order-list { max-height: 26vh; padding: 10px 14px; }
+            .order-item { padding: 10px; font-size: .88rem; }
+            .sidebar-footer { padding: 12px 14px; }
+            .total-row { font-size: 1.4rem; margin-bottom: 8px; }
+            .btn-side { padding: 13px; margin-top: 8px; border-radius: 12px; }
+            .main-content { min-height: 100vh; height: 100vh; }
+            .main-content::before { width: 70vw; height: 70vw; opacity: .05; }
+            .header-brand { padding: 12px 14px; gap: 10px; }
+            .header-brand h1 { font-size: 1.6rem !important; }
+            .logo-img { width: 45px; height: 45px; border-radius: 12px; }
+            #date-text { font-size: 1.05rem !important; }
+            .view { padding: 14px 12px 155px 12px; height: calc(100vh - 69px); overflow-y: auto; }
+            .best-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+            .best-card { padding: 12px; border-radius: 16px; }
+            .product-photo, .product-photo-empty { height: 92px; border-radius: 12px; margin-bottom: 10px; }
+            .product-photo-empty { font-size: 2.1rem; }
+            .best-card strong { font-size: 1.12rem; line-height: 1.05; min-height: 36px; }
+            .best-price-tag { font-size: 1.15rem; padding: 7px; }
+            .stats-grid { grid-template-columns: 1fr; gap: 10px; }
+            .stat-card { padding: 14px; border-radius: 16px; }
+            .stat-card div { font-size: 1.55rem; }
+            table { min-width: 720px; }
+            #view-stock > div { flex-direction: column; }
+            .modal { width: 94%; padding: 22px; border-radius: 22px; }
+            .opt-btn { padding: 14px; font-size: 1rem; }
+            .bottom-nav { position: fixed; padding: 10px; gap: 8px; bottom: 0; }
+            .nav-btn { padding: 12px 8px; font-size: .78rem; border-radius: 13px; }
+            .mobile-cart-bar { display: flex; position: fixed; left: 10px; right: 10px; bottom: 72px; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border-radius: 18px; background: var(--dark); color: white; box-shadow: 0 8px 22px rgba(0,0,0,.22); z-index: 1300; }
+            .mobile-cart-bar b { font-size: .86rem; }
+            .mobile-cart-bar span { font-size: 1.2rem; font-weight: 900; color: var(--orange); }
+            .mobile-cart-bar button { border: 0; border-radius: 12px; background: var(--orange); color: white; font-weight: 900; padding: 10px 12px; }
+        }
+
+        @media (max-width: 380px) {
+            .best-grid { grid-template-columns: 1fr; }
+            .product-photo, .product-photo-empty { height: 125px; }
+        }
+
         @media print {
             body * { visibility: hidden; }
             #receipt-print, #receipt-print * { visibility: visible; }
@@ -90,7 +165,7 @@
     </div>
 
     <aside class="sidebar">
-        <div class="sidebar-header">TERMINAL</div>
+        <div class="sidebar-header" onclick="toggleMobileCart()">TERMINAL / CART</div>
         <div id="cart-items" class="order-list"></div>
         <div class="sidebar-footer">
             <div class="total-row"><span>TOTAL</span><span id="total-val">RM 0.00</span></div>
@@ -98,6 +173,12 @@
             <button class="btn-side" style="background:var(--dark)" onclick="openCheckout()">💳 CHECKOUT</button>
         </div>
     </aside>
+
+    <div class="mobile-cart-bar">
+        <b id="mobile-cart-count">0 items</b>
+        <span id="mobile-total-val">RM 0.00</span>
+        <button onclick="toggleMobileCart()">CART</button>
+    </div>
 
     <main class="main-content">
         <header class="header-brand">
@@ -168,7 +249,8 @@
                 <input type="number" id="cash-in" class="edit-input" style="font-size:1.5rem; text-align:center;" placeholder="Cash In" oninput="doMath()">
                 <div style="text-align:center; margin-top:10px; font-weight:800; color:var(--teal);">CHANGE: <span id="change-out">RM 0.00</span></div>
             </div>
-            <button class="btn-side" style="background:var(--teal)" onclick="processSale()">COMPLETE & PRINT</button>
+            <button class="btn-side" style="background:var(--teal)" onclick="processSale(false)">COMPLETE SALE</button>
+            <button class="btn-side" style="background:var(--dark)" onclick="processSale(true)">PRINT RECEIPT</button>
             <button class="btn-side" style="background:none; color:#999" onclick="closeModal('pay-modal')">BACK</button>
         </div>
     </div>
@@ -339,6 +421,18 @@
                 return `<div class="order-item"><b>${i.qty}x ${i.name}</b><button class="remove-btn" onclick="cart.splice(${idx},1); updateUI();">DEL</button></div>`;
             }).join('');
             document.getElementById('total-val').innerText = `RM ${total.toFixed(2)}`;
+            const mobileTotal = document.getElementById('mobile-total-val');
+            const mobileCount = document.getElementById('mobile-cart-count');
+            if (mobileTotal) mobileTotal.innerText = `RM ${total.toFixed(2)}`;
+            if (mobileCount) {
+                const qty = cart.reduce((sum, item) => sum + item.qty, 0);
+                mobileCount.innerText = `${qty} item${qty === 1 ? '' : 's'}`;
+            }
+        }
+
+        function toggleMobileCart() {
+            const sidebar = document.querySelector('.sidebar');
+            if (sidebar) sidebar.classList.toggle('open');
         }
 
         function setMethod(m) {
@@ -354,7 +448,7 @@
             document.getElementById('change-out').innerText = `RM ${Math.max(0, i-t).toFixed(2)}`;
         }
 
-        async function processSale() {
+        async function processSale(printReceipt = false) {
             const t = parseFloat(document.getElementById('total-val').innerText.replace('RM ', ''));
             if(t <= 0) return;
             let cTotal = 0;
@@ -384,12 +478,14 @@
             await saveSale(newSale);
             await saveAllProducts();
 
-            // Print Logic
+            // Receipt only prints when selected
             document.getElementById('r-date').innerText = newSale.date;
             document.getElementById('r-items').innerHTML = receiptItemsHtml;
             document.getElementById('r-total').innerText = `RM ${t.toFixed(2)}`;
             
-            window.print();
+            if (printReceipt) {
+                window.print();
+            }
 
             cart=[]; updateUI(); renderMenu(); closeModal('pay-modal');
         }
