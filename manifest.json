@@ -1,0 +1,25 @@
+{
+  "name": "Crunch Lab POS",
+  "short_name": "Crunch POS",
+  "description": "Crunch Lab POS system with Supabase sync",
+  "start_url": "./crunch_lab_pos_PWA_install_app.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f5f1e8",
+  "theme_color": "#12181b",
+  "icons": [
+    {
+      "src": "crunch-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "crunch-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
