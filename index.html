@@ -7,8 +7,8 @@
 
     <!-- PWA / Install App Setup -->
     <link rel="manifest" href="manifest.json">
-    <link rel="icon" type="image/png" sizes="192x192" href="crunchlogo.jpg">
-    <link rel="apple-touch-icon" href="crunchlogo.jpg">
+    <link rel="icon" type="image/png" sizes="192x192" href="crunch-icon-192.png">
+    <link rel="apple-touch-icon" href="crunch-icon-192.png">
     <meta name="theme-color" content="#12181b">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-title" content="Crunch POS">
@@ -115,7 +115,7 @@
         @media (max-width: 700px) {
             html, body { height: 100%; }
             body { display: block; overflow: hidden; background-attachment: scroll; }
-            .sidebar { position: fixed; left: 0; right: 0; bottom: 74px; top: auto; width: 100%; max-height: 48vh; flex: none; border-right: 0; border-top: 1px solid #e5e7eb; border-radius: 24px 24px 0 0; transform: translateY(calc(100% - 62px)); transition: transform .22s ease; box-shadow: 0 -8px 24px rgba(0,0,0,.18); z-index: 1200; }
+            .sidebar { position: fixed; left: 0; right: 0; bottom: 132px; top: auto; width: 100%; max-height: 54vh; flex: none; border-right: 0; border-top: 1px solid #e5e7eb; border-radius: 24px 24px 0 0; transform: translateY(calc(100% - 62px)); transition: transform .22s ease; box-shadow: 0 -8px 24px rgba(0,0,0,.18); z-index: 1200; }
             .sidebar.open { transform: translateY(0); }
             .sidebar-header { padding: 14px; font-size: 1.4rem; cursor: pointer; }
             .order-list { max-height: 26vh; padding: 10px 14px; }
@@ -148,7 +148,7 @@
             .mobile-cart-bar { display: flex; position: fixed; left: 10px; right: 10px; bottom: 72px; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border-radius: 18px; background: var(--dark); color: white; box-shadow: 0 8px 22px rgba(0,0,0,.22); z-index: 1300; }
             .mobile-cart-bar b { font-size: .86rem; }
             .mobile-cart-bar span { font-size: 1.2rem; font-weight: 900; color: var(--orange); }
-            .mobile-cart-bar button { border: 0; border-radius: 12px; background: var(--orange); color: white; font-weight: 900; padding: 10px 12px; }
+            .mobile-cart-bar button { border: 0; border-radius: 12px; background: var(--orange); color: white; font-weight: 900; padding: 10px 14px; min-width: 105px; }
         }
 
         @media (max-width: 380px) {
@@ -191,7 +191,7 @@
     <div class="mobile-cart-bar">
         <b id="mobile-cart-count">0 items</b>
         <span id="mobile-total-val">RM 0.00</span>
-        <button onclick="toggleMobileCart()">CART</button>
+        <button onclick="openCheckout()">CHECKOUT</button>
     </div>
 
     <main class="main-content">
