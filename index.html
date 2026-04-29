@@ -40,6 +40,8 @@
 
         .best-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
         .best-card { background: white; border-radius: 20px; padding: 25px; text-align: center; box-shadow: 0 10px 20px rgba(0,0,0,0.06); cursor: pointer; position: relative; border: 2px solid transparent; }
+        .product-photo { width: 100%; height: 150px; object-fit: cover; border-radius: 16px; margin-bottom: 14px; background: #f1f5f9; border: 2px solid #f1f5f9; }
+        .product-photo-empty { width: 100%; height: 150px; border-radius: 16px; margin-bottom: 14px; background: linear-gradient(135deg, #fff7ed, #f1f5f9); display:flex; align-items:center; justify-content:center; font-size: 3rem; }
         .best-card strong { display: block; font-family: 'Bebas Neue'; font-size: 1.8rem; margin-bottom: 8px; }
         .best-price-tag { background: var(--dark); color: white; padding: 8px; font-family: 'Bebas Neue'; font-size: 1.8rem; border-radius: 10px; }
 
@@ -52,6 +54,8 @@
         th, td { padding: 15px; text-align: left; border-bottom: 1px solid #eee; }
         th { background: var(--dark); color: white; font-size: 0.75rem; text-transform: uppercase; }
         .edit-input { padding: 8px; border: 1px solid #ddd; border-radius: 6px; width: 100%; font-family: 'Outfit'; }
+        .img-upload-label { display:inline-block; padding:8px 10px; border-radius:10px; background:var(--dark); color:white; font-size:.75rem; font-weight:800; cursor:pointer; white-space:nowrap; }
+        .thumb-preview { width:64px; height:48px; object-fit:cover; border-radius:10px; border:1px solid #ddd; background:#f8fafc; }
 
         .bottom-nav { position: absolute; bottom: 0; left: 0; width: 100%; display: flex; gap: 15px; padding: 15px 40px; background: white; border-top: 1px solid #eee; z-index: 20; }
         .nav-btn { flex: 1; background: #f1f5f9; border: none; padding: 15px; border-radius: 15px; font-weight: 800; cursor: pointer; color: #64748b; }
@@ -125,10 +129,11 @@
                 <input type="text" id="new-name" class="edit-input" placeholder="Name">
                 <input type="number" id="new-price" class="edit-input" placeholder="Price">
                 <input type="number" id="new-cost" class="edit-input" placeholder="Cost">
+                <input type="file" id="new-image" accept="image/*" class="edit-input">
                 <button onclick="addNewProduct()" style="padding:10px 20px; background:var(--orange); color:white; border:none; border-radius:10px; font-weight:800;">ADD</button>
             </div>
             <table>
-                <thead><tr><th>Name</th><th>Stock</th><th>Price</th><th>Cost</th><th>Action</th></tr></thead>
+                <thead><tr><th>Image</th><th>Name</th><th>Stock</th><th>Price</th><th>Cost</th><th>Action</th></tr></thead>
                 <tbody id="stock-body"></tbody>
             </table>
         </div>
@@ -178,12 +183,12 @@
         const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
         const defaultProducts = [
-            { id: 1, name: 'CRUNCH CUT CHICKEN', price: 10.00, cost: 4.50, stock: 50, is_fries: false },
-            { id: 2, name: 'CRUNCH TENDERS', price: 12.00, cost: 5.50, stock: 40, is_fries: false },
-            { id: 3, name: 'CRUNCH FRIES', price: 5.00, cost: 2.00, stock: 100, is_fries: true },
-            { id: 4, name: 'NUGGET 6 PCS', price: 6.00, cost: 2.50, stock: 60, is_fries: false },
-            { id: 5, name: 'NUGGET 9 PCS', price: 8.00, cost: 3.50, stock: 40, is_fries: false },
-            { id: 6, name: 'WINGETTES & DRUMETTES', price: 9.00, cost: 4.00, stock: 30, is_fries: false }
+            { id: 1, name: 'CRUNCH CUT CHICKEN', price: 10.00, cost: 4.50, stock: 50, is_fries: false, image_url: '' },
+            { id: 2, name: 'CRUNCH TENDERS', price: 12.00, cost: 5.50, stock: 40, is_fries: false, image_url: '' },
+            { id: 3, name: 'CRUNCH FRIES', price: 5.00, cost: 2.00, stock: 100, is_fries: true, image_url: '' },
+            { id: 4, name: 'NUGGET 6 PCS', price: 6.00, cost: 2.50, stock: 60, is_fries: false, image_url: '' },
+            { id: 5, name: 'NUGGET 9 PCS', price: 8.00, cost: 3.50, stock: 40, is_fries: false, image_url: '' },
+            { id: 6, name: 'WINGETTES & DRUMETTES', price: 9.00, cost: 4.00, stock: 30, is_fries: false, image_url: '' }
         ];
 
         let products = [];
@@ -248,7 +253,8 @@
                 price: Number(product.price),
                 cost: Number(product.cost),
                 stock: Number(product.stock),
-                is_fries: Boolean(product.is_fries)
+                is_fries: Boolean(product.is_fries),
+                image_url: product.image_url || ''
             };
             const { error } = await db.from('products').upsert(clean);
             if (error) {
@@ -267,7 +273,8 @@
                 price: Number(p.price),
                 cost: Number(p.cost),
                 stock: Number(p.stock),
-                is_fries: Boolean(p.is_fries)
+                is_fries: Boolean(p.is_fries),
+                image_url: p.image_url || ''
             }));
             const { error } = await db.from('products').upsert(cleanProducts);
             if (error) {
@@ -300,8 +307,9 @@
             document.getElementById('menu-grid').innerHTML = products.map(p => `
                 <div class="best-card" onclick="handleItem(${p.id})">
                     <span style="position:absolute; top:8px; right:12px; font-size:0.7rem; font-weight:800; color:#ef4444;">${p.stock} left</span>
+                    ${p.image_url ? `<img src="${p.image_url}" class="product-photo" alt="${p.name}">` : `<div class="product-photo-empty">🍗</div>`}
                     <strong>${p.name}</strong>
-                    <div class="best-price-tag">RM ${p.price.toFixed(2)}</div>
+                    <div class="best-price-tag">RM ${Number(p.price).toFixed(2)}</div>
                 </div>`).join('');
         }
 
@@ -402,12 +410,39 @@
         function renderStock() {
             document.getElementById('stock-body').innerHTML = products.map(p => `
                 <tr>
+                    <td>
+                        ${p.image_url ? `<img src="${p.image_url}" class="thumb-preview">` : `<div class="thumb-preview" style="display:flex;align-items:center;justify-content:center;">🍗</div>`}
+                        <br><label class="img-upload-label">UPLOAD
+                            <input type="file" accept="image/*" onchange="uploadProductImage(${p.id}, this.files[0])" style="display:none;">
+                        </label>
+                    </td>
                     <td><input type="text" class="edit-input" value="${p.name}" onchange="editItem(${p.id},'name',this.value)"></td>
                     <td><b>${p.stock}</b> <button onclick="addStock(${p.id})">+</button></td>
                     <td><input type="number" class="edit-input" value="${p.price}" onchange="editItem(${p.id},'price',this.value)"></td>
                     <td><input type="number" class="edit-input" value="${p.cost}" onchange="editItem(${p.id},'cost',this.value)"></td>
                     <td><button onclick="delItem(${p.id})" style="color:red; background:none; border:none; cursor:pointer;">DEL</button></td>
                 </tr>`).join('');
+        }
+
+        function fileToBase64(file) {
+            return new Promise((resolve, reject) => {
+                if (!file) return resolve('');
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+        }
+
+        async function uploadProductImage(id, file) {
+            if (!file) return;
+            const p = products.find(x => x.id === id);
+            if (!p) return;
+            showStatus('UPLOADING IMAGE...');
+            p.image_url = await fileToBase64(file);
+            await saveProduct(p);
+            renderStock();
+            renderMenu();
         }
 
         async function editItem(id, f, v) { const p = products.find(x => x.id === id); p[f] = (f==='name')?v.toUpperCase():parseFloat(v); await saveProduct(p); renderMenu(); }
@@ -418,10 +453,17 @@
             const n = document.getElementById('new-name').value;
             const pr = parseFloat(document.getElementById('new-price').value);
             const co = parseFloat(document.getElementById('new-cost').value) || 0;
+            const imgFile = document.getElementById('new-image').files[0];
             if(!n || isNaN(pr)) return;
-            const newProduct = { id: Date.now(), name: n.toUpperCase(), price: pr, cost: co, stock: 0, is_fries: false };
+            const imageUrl = imgFile ? await fileToBase64(imgFile) : '';
+            const newProduct = { id: Date.now(), name: n.toUpperCase(), price: pr, cost: co, stock: 0, is_fries: false, image_url: imageUrl };
             products.push(newProduct);
-            await saveProduct(newProduct); renderStock(); renderMenu();
+            await saveProduct(newProduct);
+            document.getElementById('new-name').value = '';
+            document.getElementById('new-price').value = '';
+            document.getElementById('new-cost').value = '';
+            document.getElementById('new-image').value = '';
+            renderStock(); renderMenu();
         }
 
         async function switchView(v) {
