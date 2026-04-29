@@ -168,23 +168,126 @@
         </div>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
     <script>
-        let products = JSON.parse(localStorage.getItem('crunch_stock')) || [
-            { id: 1, name: 'CRUNCH CUT CHICKEN', price: 10.00, cost: 4.50, stock: 50 },
-            { id: 2, name: 'CRUNCH TENDERS', price: 12.00, cost: 5.50, stock: 40 },
-            { id: 3, name: 'CRUNCH FRIES', price: 5.00, cost: 2.00, stock: 100, isFries: true },
-            { id: 4, name: 'NUGGET 6 PCS', price: 6.00, cost: 2.50, stock: 60 },
-            { id: 5, name: 'NUGGET 9 PCS', price: 8.00, cost: 3.50, stock: 40 },
-            { id: 6, name: 'WINGETTES & DRUMETTES', price: 9.00, cost: 4.00, stock: 30 }
+        // SUPABASE CONNECTION
+        // Use project URL only. Do not use /rest/v1/ here.
+        const SUPABASE_URL = "https://jtgiswzolnretpezfxpc.supabase.co";
+        const SUPABASE_KEY = "sb_publishable_9m30QqCS2ttu9td6F84ogQ_JizwPY3v";
+        const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        const defaultProducts = [
+            { id: 1, name: 'CRUNCH CUT CHICKEN', price: 10.00, cost: 4.50, stock: 50, is_fries: false },
+            { id: 2, name: 'CRUNCH TENDERS', price: 12.00, cost: 5.50, stock: 40, is_fries: false },
+            { id: 3, name: 'CRUNCH FRIES', price: 5.00, cost: 2.00, stock: 100, is_fries: true },
+            { id: 4, name: 'NUGGET 6 PCS', price: 6.00, cost: 2.50, stock: 60, is_fries: false },
+            { id: 5, name: 'NUGGET 9 PCS', price: 8.00, cost: 3.50, stock: 40, is_fries: false },
+            { id: 6, name: 'WINGETTES & DRUMETTES', price: 9.00, cost: 4.00, stock: 30, is_fries: false }
         ];
 
+        let products = [];
         let cart = [];
-        let sales = JSON.parse(localStorage.getItem('crunch_sales')) || [];
+        let sales = [];
         let payMethod = 'Cash';
 
-        function save() {
-            localStorage.setItem('crunch_stock', JSON.stringify(products));
-            localStorage.setItem('crunch_sales', JSON.stringify(sales));
+        function showStatus(msg, error = false) {
+            let el = document.getElementById('sync-status');
+            if (!el) {
+                el = document.createElement('div');
+                el.id = 'sync-status';
+                el.style.cssText = 'position:fixed;top:10px;right:10px;z-index:9999;padding:8px 12px;border-radius:999px;font-size:12px;font-weight:800;color:white;box-shadow:0 4px 12px rgba(0,0,0,.15)';
+                document.body.appendChild(el);
+            }
+            el.innerText = msg;
+            el.style.background = error ? '#ef4444' : '#10b981';
+        }
+
+        async function loadData() {
+            showStatus('SYNCING...');
+            const { data: p, error: pe } = await db.from('products').select('*').order('id', { ascending: true });
+            const { data: s, error: se } = await db.from('sales').select('*').order('id', { ascending: true });
+
+            if (pe || se) {
+                console.error(pe || se);
+                showStatus('SUPABASE ERROR - CHECK SQL/POLICY', true);
+                products = defaultProducts;
+                sales = [];
+                renderMenu();
+                return;
+            }
+
+            products = p || [];
+            sales = s || [];
+
+            if (products.length === 0) {
+                const { error } = await db.from('products').upsert(defaultProducts);
+                if (error) {
+                    console.error(error);
+                    showStatus('SETUP ERROR', true);
+                    products = defaultProducts;
+                } else {
+                    products = defaultProducts;
+                    showStatus('DEFAULT MENU ADDED');
+                }
+            } else {
+                showStatus('SYNCED');
+            }
+
+            renderMenu();
+            if (document.getElementById('view-reports').classList.contains('active-view')) renderReports();
+            if (document.getElementById('view-stock').classList.contains('active-view')) renderStock();
+        }
+
+        function subscribeSync() { showStatus('SYNC READY'); }
+
+        async function saveProduct(product) {
+            const clean = {
+                id: product.id,
+                name: product.name,
+                price: Number(product.price),
+                cost: Number(product.cost),
+                stock: Number(product.stock),
+                is_fries: Boolean(product.is_fries)
+            };
+            const { error } = await db.from('products').upsert(clean);
+            if (error) {
+                console.error(error);
+                showStatus('SAVE ERROR', true);
+                alert('Cannot save to Supabase. Check table/policy.');
+            } else {
+                showStatus('SAVED');
+            }
+        }
+
+        async function saveAllProducts() {
+            const cleanProducts = products.map(p => ({
+                id: p.id,
+                name: p.name,
+                price: Number(p.price),
+                cost: Number(p.cost),
+                stock: Number(p.stock),
+                is_fries: Boolean(p.is_fries)
+            }));
+            const { error } = await db.from('products').upsert(cleanProducts);
+            if (error) {
+                console.error(error);
+                showStatus('STOCK SAVE ERROR', true);
+                alert('Cannot update stock in Supabase. Check table/policy.');
+            } else {
+                showStatus('STOCK UPDATED');
+            }
+        }
+
+        async function saveSale(sale) {
+            const { error } = await db.from('sales').insert(sale);
+            if (error) {
+                console.error(error);
+                showStatus('SALE SAVE ERROR', true);
+                alert('Sale not saved to Supabase. Check table/policy.');
+            } else {
+                showStatus('SALE SAVED');
+            }
         }
 
         function updateClock() {
@@ -205,12 +308,12 @@
         function handleItem(id) {
             const p = products.find(x => x.id === id);
             if(p.stock <= 0) return alert("OUT OF STOCK");
-            if(p.isFries) document.getElementById('fries-modal').style.display = 'flex';
+            if(p.is_fries) document.getElementById('fries-modal').style.display = 'flex';
             else addToCart(p.name, p.price, p.cost, p.id);
         }
 
         function confirmFries(flavor) {
-            const p = products.find(x => x.isFries);
+            const p = products.find(x => x.is_fries);
             addToCart(`${p.name} (${flavor})`, p.price, p.cost, p.id);
             closeModal('fries-modal');
         }
@@ -243,7 +346,7 @@
             document.getElementById('change-out').innerText = `RM ${Math.max(0, i-t).toFixed(2)}`;
         }
 
-        function processSale() {
+        async function processSale() {
             const t = parseFloat(document.getElementById('total-val').innerText.replace('RM ', ''));
             if(t <= 0) return;
             let cTotal = 0;
@@ -270,7 +373,8 @@
             };
 
             sales.push(newSale);
-            save();
+            await saveSale(newSale);
+            await saveAllProducts();
 
             // Print Logic
             document.getElementById('r-date').innerText = newSale.date;
@@ -306,33 +410,36 @@
                 </tr>`).join('');
         }
 
-        function editItem(id, f, v) { const p = products.find(x => x.id === id); p[f] = (f==='name')?v.toUpperCase():parseFloat(v); save(); renderMenu(); }
-        function addStock(id) { const q = prompt("Qty:"); if(q) { products.find(x => x.id === id).stock += parseInt(q); save(); renderStock(); renderMenu(); } }
-        function delSale(id) { sales = sales.filter(x => x.id !== id); save(); renderReports(); }
-        function delItem(id) { products = products.filter(x => x.id !== id); save(); renderStock(); renderMenu(); }
-        function addNewProduct() {
+        async function editItem(id, f, v) { const p = products.find(x => x.id === id); p[f] = (f==='name')?v.toUpperCase():parseFloat(v); await saveProduct(p); renderMenu(); }
+        async function addStock(id) { const q = prompt("Qty:"); if(q) { const p = products.find(x => x.id === id); p.stock += parseInt(q); await saveProduct(p); renderStock(); renderMenu(); } }
+        async function delSale(id) { sales = sales.filter(x => x.id !== id); await db.from('sales').delete().eq('id', id); renderReports(); }
+        async function delItem(id) { products = products.filter(x => x.id !== id); await db.from('products').delete().eq('id', id); renderStock(); renderMenu(); }
+        async function addNewProduct() {
             const n = document.getElementById('new-name').value;
             const pr = parseFloat(document.getElementById('new-price').value);
             const co = parseFloat(document.getElementById('new-cost').value) || 0;
             if(!n || isNaN(pr)) return;
-            products.push({ id: Date.now(), name: n.toUpperCase(), price: pr, cost: co, stock: 0 });
-            save(); renderStock(); renderMenu();
+            const newProduct = { id: Date.now(), name: n.toUpperCase(), price: pr, cost: co, stock: 0, is_fries: false };
+            products.push(newProduct);
+            await saveProduct(newProduct); renderStock(); renderMenu();
         }
 
-        function switchView(v) {
+        async function switchView(v) {
             document.querySelectorAll('.view').forEach(e => e.classList.remove('active-view'));
             document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
             document.getElementById('view-'+v).classList.add('active-view');
             document.getElementById('nav-'+v).classList.add('active');
-            if(v==='reports') renderReports();
-            if(v==='stock') renderStock();
+            if(v==='reports') { await loadData(); renderReports(); }
+            if(v==='stock') { await loadData(); renderStock(); }
         }
 
         function openCheckout() { if(cart.length>0) { document.getElementById('modal-total').innerText = document.getElementById('total-val').innerText; document.getElementById('pay-modal').style.display = 'flex'; } }
         function closeModal(id) { document.getElementById(id).style.display = 'none'; }
         function clearCart() { cart = []; updateUI(); }
 
-        renderMenu();
+        loadData();
+        subscribeSync();
+        setInterval(loadData, 5000);
     </script>
 </body>
 </html>
