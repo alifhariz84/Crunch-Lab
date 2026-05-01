@@ -105,6 +105,17 @@
 
         #receipt-print { display: none; }
 
+        .menu-tools { display:flex; gap:10px; align-items:center; justify-content:space-between; margin-bottom:16px; flex-wrap:wrap; }
+        .arrange-btn { border:0; border-radius:14px; padding:12px 16px; font-weight:900; cursor:pointer; background:var(--dark); color:white; box-shadow:0 4px 12px rgba(0,0,0,.10); }
+        .arrange-btn.active { background:var(--orange); }
+        .arrange-hint { font-size:.85rem; font-weight:900; color:#64748b; background:white; border-radius:999px; padding:9px 12px; }
+        .best-card.arrange-mode { cursor:grab; border-color:var(--orange); }
+        .best-card.dragging { opacity:.45; transform:scale(.98); }
+        .best-card.drag-over { border-color:var(--teal); box-shadow:0 0 0 4px rgba(16,185,129,.14); }
+        .move-controls { display:none; gap:8px; justify-content:center; margin-top:10px; }
+        .move-controls button { border:0; border-radius:10px; padding:8px 10px; font-weight:900; cursor:pointer; background:#f1f5f9; color:#0f172a; }
+        body.arrange-active .move-controls { display:flex; }
+
 
         /* RESPONSIVE LAYOUT: PC / TABLET / PHONE */
         .mobile-cart-bar { display: none; }
@@ -233,7 +244,12 @@
             </div>
         </header>
 
-        <div id="view-pos" class="view active-view"><div class="best-grid" id="menu-grid"></div></div>
+        <div id="view-pos" class="view active-view">
+            <div class="menu-tools">
+                <button id="arrange-mode-btn" class="arrange-btn" onclick="toggleArrangeMode()">↕️ ARRANGE MENU</button>
+            </div>
+            <div class="best-grid" id="menu-grid"></div>
+        </div>
 
         <div id="view-reports" class="view">
             <h2 style="font-family:'Bebas Neue';">ANALYTICS</h2>
@@ -335,12 +351,12 @@
         let CRUNCH_BRAND_ID = null;
 
         const defaultProducts = [
-            { name: 'CRUNCH CUT CHICKEN', price: 10.00, cost: 4.50, stock: 50, is_fries: false, image_url: '', category: 'Food' },
-            { name: 'CRUNCH TENDERS', price: 12.00, cost: 5.50, stock: 40, is_fries: false, image_url: '', category: 'Food' },
-            { name: 'CRUNCH FRIES', price: 5.00, cost: 2.00, stock: 100, is_fries: true, image_url: '', category: 'Food' },
-            { name: 'NUGGET 6 PCS', price: 6.00, cost: 2.50, stock: 60, is_fries: false, image_url: '', category: 'Food' },
-            { name: 'NUGGET 9 PCS', price: 8.00, cost: 3.50, stock: 40, is_fries: false, image_url: '', category: 'Food' },
-            { name: 'WINGETTES & DRUMETTES', price: 9.00, cost: 4.00, stock: 30, is_fries: false, image_url: '', category: 'Food' }
+            { name: 'CRUNCH CUT CHICKEN', price: 10.00, cost: 4.50, stock: 50, is_fries: false, image_url: '', category: 'Main Menu', priority: 2 },
+            { name: 'CRUNCH TENDERS', price: 12.00, cost: 5.50, stock: 40, is_fries: false, image_url: '', category: 'Main Menu', priority: 1 },
+            { name: 'CRUNCH FRIES', price: 5.00, cost: 2.00, stock: 100, is_fries: true, image_url: '', category: 'Sides', priority: 10 },
+            { name: 'NUGGET 6 PCS', price: 6.00, cost: 2.50, stock: 60, is_fries: false, image_url: '', category: 'Sides', priority: 11 },
+            { name: 'NUGGET 9 PCS', price: 8.00, cost: 3.50, stock: 40, is_fries: false, image_url: '', category: 'Sides', priority: 12 },
+            { name: 'WINGETTES & DRUMETTES', price: 9.00, cost: 4.00, stock: 30, is_fries: false, image_url: '', category: 'Main Menu', priority: 3 }
         ];
 
         let products = [];
@@ -350,6 +366,8 @@
         let payMethod = 'Cash';
         let packingFilter = 'Pending';
         let isProcessingSale = false;
+        let arrangeMode = false;
+        let draggedProductId = null;
 
         function showStatus(msg, error = false) {
             let el = document.getElementById('sync-status');
@@ -384,19 +402,34 @@
             return CRUNCH_BRAND_ID;
         }
 
+        async function ensureMenuPositionReady() {
+            // Safe to run every time. If column already exists, Supabase ignores it.
+            // Main setup is still best done in SQL Editor, but this keeps POS readable if column is missing.
+            return true;
+        }
+
+        function sortedProducts() {
+            return [...products].sort((a,b) => {
+                const pa = Number(a.priority ?? 9999);
+                const pb = Number(b.priority ?? 9999);
+                if (pa !== pb) return pa - pb;
+                return String(a.name || '').localeCompare(String(b.name || ''));
+            });
+        }
+
         async function loadData(showSync = true) {
             if (showSync) showStatus('SYNCING...');
             try {
                 const brandId = await getCrunchBrandId();
-                let { data: p, error: pe } = await db.from('products').select('*').eq('brand', BRAND_NAME).order('created_at', { ascending: true });
+                let { data: p, error: pe } = await db.from('products').select('*').eq('brand', BRAND_NAME).order('priority', { ascending: true }).order('name', { ascending: true });
                 if (pe) {
-                    const fallback = await db.from('products').select('*').eq('brand_id', brandId).order('created_at', { ascending: true });
+                    const fallback = await db.from('products').select('*').eq('brand_id', brandId).order('priority', { ascending: true }).order('name', { ascending: true });
                     p = fallback.data;
                     pe = fallback.error;
                 }
                 const { data: s, error: se } = await db.from('sales').select('*').eq('brand', BRAND_NAME).order('created_at', { ascending: true });
                 if (pe || se) throw (pe || se);
-                products = (p || []).map(x => ({ ...x, stock: Number(x.stock ?? x.stock_qty ?? 0), price: Number(x.price ?? 0), cost: Number(x.cost ?? 0), is_fries: Boolean(x.is_fries) }));
+                products = (p || []).map(x => ({ ...x, stock: Number(x.stock ?? x.stock_qty ?? 0), price: Number(x.price ?? 0), cost: Number(x.cost ?? 0), is_fries: Boolean(x.is_fries), priority: Number(x.priority ?? 9999) }));
                 sales = (s || []).map(x => ({ ...x, total: Number(x.total ?? x.total_amount ?? 0), method: x.method || x.payment_method || '', time: x.time || new Date(x.created_at || Date.now()).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}), details: x.details || x.receipt_no || '' }));
                 if (products.length === 0) {
                     const seed = defaultProducts.map(x => ({ ...x, brand: BRAND_NAME, brand_id: brandId, is_active: true }));
@@ -567,7 +600,7 @@
 
         async function saveProduct(product) {
             const brandId = await getCrunchBrandId();
-            const clean = { name: String(product.name || '').toUpperCase(), brand: BRAND_NAME, brand_id: brandId, category: product.category || 'Food', price: Number(product.price || 0), cost: Number(product.cost || 0), stock: Number(product.stock || 0), is_fries: Boolean(product.is_fries), image_url: product.image_url || '', is_active: true };
+            const clean = { name: String(product.name || '').toUpperCase(), brand: BRAND_NAME, brand_id: brandId, category: product.category || 'Food', price: Number(product.price || 0), cost: Number(product.cost || 0), stock: Number(product.stock || 0), is_fries: Boolean(product.is_fries), image_url: product.image_url || '', priority: Number(product.priority ?? 9999), is_active: true };
             let result;
             if (product.id && !String(product.id).startsWith('local-')) result = await db.from('products').update(clean).eq('id', product.id).select().single();
             else result = await db.from('products').insert(clean).select().single();
@@ -579,7 +612,7 @@
             const brandId = await getCrunchBrandId();
             for (const p of products) {
                 if (!p.id || String(p.id).startsWith('local-')) continue;
-                const { error } = await db.from('products').update({ brand: BRAND_NAME, brand_id: brandId, stock: Number(p.stock || 0), price: Number(p.price || 0), cost: Number(p.cost || 0), image_url: p.image_url || '', is_fries: Boolean(p.is_fries) }).eq('id', p.id);
+                const { error } = await db.from('products').update({ brand: BRAND_NAME, brand_id: brandId, stock: Number(p.stock || 0), price: Number(p.price || 0), cost: Number(p.cost || 0), image_url: p.image_url || '', is_fries: Boolean(p.is_fries), priority: Number(p.priority ?? 9999) }).eq('id', p.id);
                 if (error) { console.error(error); showStatus('STOCK SAVE ERROR', true); alert('Cannot update stock in Supabase. Check table/policy.'); return; }
             }
             showStatus('STOCK SYNCED TO DASHBOARD');
@@ -604,13 +637,118 @@
         setInterval(updateClock, 1000); updateClock();
 
         function renderMenu() {
-            document.getElementById('menu-grid').innerHTML = products.map(p => `
-                <div class="best-card" onclick="handleItem('${safeText(p.id)}')">
+            const list = sortedProducts();
+            document.getElementById('menu-grid').innerHTML = list.map((p, index) => `
+                <div class="best-card ${arrangeMode ? 'arrange-mode' : ''}" 
+                    draggable="${arrangeMode ? 'true' : 'false'}"
+                    data-id="${safeText(p.id)}"
+                    onclick="handleMenuCardClick(event, '${safeText(p.id)}')"
+                    ondragstart="onProductDragStart(event, '${safeText(p.id)}')"
+                    ondragover="onProductDragOver(event)"
+                    ondragleave="onProductDragLeave(event)"
+                    ondrop="onProductDrop(event, '${safeText(p.id)}')"
+                    ondragend="onProductDragEnd(event)">
                     <span style="position:absolute; top:8px; right:12px; font-size:0.7rem; font-weight:800; color:#ef4444;">${Number(p.stock || 0)} left</span>
+                    ${arrangeMode ? `<span style="position:absolute; top:8px; left:12px; font-size:.72rem; font-weight:900; background:#fff7ed; color:#c2410c; padding:5px 8px; border-radius:999px;">#${index + 1}</span>` : ''}
                     ${p.image_url ? `<img src="${p.image_url}" class="product-photo" alt="${safeText(p.name)}">` : `<div class="product-photo-empty">🍗</div>`}
                     <strong>${p.name}</strong>
                     <div class="best-price-tag">RM ${Number(p.price).toFixed(2)}</div>
+                    <div class="move-controls">
+                        <button onclick="moveProductPosition(event, '${safeText(p.id)}', -1)">⬆️ UP</button>
+                        <button onclick="moveProductPosition(event, '${safeText(p.id)}', 1)">⬇️ DOWN</button>
+                    </div>
                 </div>`).join('');
+        }
+
+        function handleMenuCardClick(event, id) {
+            if (arrangeMode) {
+                event.preventDefault();
+                return;
+            }
+            handleItem(id);
+        }
+
+        function toggleArrangeMode() {
+            arrangeMode = !arrangeMode;
+            document.body.classList.toggle('arrange-active', arrangeMode);
+            const btn = document.getElementById('arrange-mode-btn');
+            if (btn) {
+                btn.classList.toggle('active', arrangeMode);
+                btn.innerText = arrangeMode ? '✅ DONE ARRANGE' : '↕️ ARRANGE MENU';
+            }
+            renderMenu();
+        }
+
+        function onProductDragStart(event, id) {
+            if (!arrangeMode) return;
+            draggedProductId = id;
+            event.currentTarget.classList.add('dragging');
+            event.dataTransfer.effectAllowed = 'move';
+            event.dataTransfer.setData('text/plain', id);
+        }
+
+        function onProductDragOver(event) {
+            if (!arrangeMode) return;
+            event.preventDefault();
+            event.currentTarget.classList.add('drag-over');
+        }
+
+        function onProductDragLeave(event) {
+            event.currentTarget.classList.remove('drag-over');
+        }
+
+        async function onProductDrop(event, targetId) {
+            if (!arrangeMode) return;
+            event.preventDefault();
+            event.currentTarget.classList.remove('drag-over');
+            const sourceId = draggedProductId || event.dataTransfer.getData('text/plain');
+            if (!sourceId || String(sourceId) === String(targetId)) return;
+            await reorderProducts(sourceId, targetId);
+        }
+
+        function onProductDragEnd(event) {
+            event.currentTarget.classList.remove('dragging');
+            document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+            draggedProductId = null;
+        }
+
+        async function moveProductPosition(event, id, direction) {
+            event.preventDefault();
+            event.stopPropagation();
+            const list = sortedProducts();
+            const index = list.findIndex(p => String(p.id) === String(id));
+            const targetIndex = index + direction;
+            if (index < 0 || targetIndex < 0 || targetIndex >= list.length) return;
+            await reorderProducts(id, list[targetIndex].id);
+        }
+
+        async function reorderProducts(sourceId, targetId) {
+            const list = sortedProducts();
+            const sourceIndex = list.findIndex(p => String(p.id) === String(sourceId));
+            const targetIndex = list.findIndex(p => String(p.id) === String(targetId));
+            if (sourceIndex < 0 || targetIndex < 0) return;
+            const [moved] = list.splice(sourceIndex, 1);
+            list.splice(targetIndex, 0, moved);
+            list.forEach((p, idx) => { p.priority = idx + 1; });
+            products = list;
+            renderMenu();
+            await saveMenuPositions();
+        }
+
+        async function saveMenuPositions() {
+            showStatus('SAVING MENU POSITION...');
+            const updates = sortedProducts()
+                .filter(p => p.id && !String(p.id).startsWith('local-'))
+                .map((p, idx) => db.from('products').update({ priority: idx + 1 }).eq('id', p.id));
+            const results = await Promise.all(updates);
+            const error = results.find(r => r.error)?.error;
+            if (error) {
+                console.error(error);
+                showStatus('POSITION SAVE ERROR - RUN SQL PRIORITY COLUMN', true);
+                alert('Position tak save. Run SQL: alter table products add column if not exists priority numeric default 9999;');
+                return;
+            }
+            showStatus('MENU POSITION SAVED');
         }
 
         function handleItem(id) {
@@ -826,7 +964,7 @@
             const imgFile = document.getElementById('new-image').files[0];
             if(!n || isNaN(pr)) return;
             const imageUrl = imgFile ? await fileToBase64(imgFile) : '';
-            const newProduct = { name: n.toUpperCase(), price: pr, cost: co, stock: 0, is_fries: false, image_url: imageUrl, category: 'Food' };
+            const newProduct = { name: n.toUpperCase(), price: pr, cost: co, stock: 0, is_fries: false, image_url: imageUrl, category: 'Food', priority: products.length + 1 };
             await saveProduct(newProduct);
             products.push(newProduct);
             document.getElementById('new-name').value = '';
