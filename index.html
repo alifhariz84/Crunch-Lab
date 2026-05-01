@@ -7,8 +7,8 @@
 
     <!-- PWA / Install App Setup -->
     <link rel="manifest" href="manifest.json">
-    <link rel="icon" type="image/png" sizes="192x192" href="crunchlogo.jpg">
-    <link rel="apple-touch-icon" href="crunchlogo.jpg">
+    <link rel="icon" type="image/png" sizes="192x192" href="crunch-icon-192.png">
+    <link rel="apple-touch-icon" href="crunch-icon-192.png">
     <meta name="theme-color" content="#12181b">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-title" content="Crunch POS">
@@ -80,6 +80,29 @@
         .install-btn.show { display:inline-flex; align-items:center; gap:6px; }
         .app-badge { font-size:.72rem; background:#ecfeff; color:#0f766e; border:1px solid #99f6e4; padding:5px 8px; border-radius:999px; font-weight:900; }
 
+
+
+        /* PAPERLESS PACKING SCREEN */
+        .packing-toolbar { display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:space-between; margin-bottom:16px; }
+        .pill-filter { border:0; border-radius:999px; padding:10px 14px; font-weight:900; cursor:pointer; background:#fff; color:#64748b; box-shadow:0 2px 8px rgba(0,0,0,.06); }
+        .pill-filter.active { background:var(--dark); color:#fff; }
+        .packing-grid { display:grid; grid-template-columns:repeat(2,minmax(280px,1fr)); gap:16px; }
+        .pack-card { background:#fff; border-radius:22px; padding:20px; box-shadow:0 8px 24px rgba(0,0,0,.07); border-left:6px solid var(--orange); }
+        .pack-head { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; margin-bottom:12px; }
+        .pack-no { font-family:'Bebas Neue'; font-size:2rem; line-height:1; color:#020617; }
+        .pack-meta { font-size:.85rem; font-weight:900; color:#334155; }
+        .pack-status { border-radius:999px; padding:7px 10px; font-size:.72rem; font-weight:900; background:#fff7ed; color:#c2410c; white-space:nowrap; }
+        .pack-status.packed { background:#dcfce7; color:#15803d; }
+        .pack-items { background:#f8fafc; border-radius:16px; padding:10px 12px; margin-bottom:14px; }
+        .pack-row { display:flex; justify-content:space-between; gap:10px; padding:9px 0; border-bottom:1px dashed #cbd5e1; font-weight:900; }
+        .pack-row:last-child { border-bottom:0; }
+        .pack-actions { display:flex; gap:8px; flex-wrap:wrap; }
+        .pack-btn { border:0; border-radius:12px; padding:12px 14px; font-weight:900; color:#fff; cursor:pointer; }
+        .pack-btn.green { background:var(--teal); }
+        .pack-btn.red { background:#ef4444; }
+        .pack-btn.dark { background:var(--dark); }
+        .empty-state { background:#fff; border-radius:22px; padding:30px; text-align:center; color:#64748b; font-weight:800; }
+
         #receipt-print { display: none; }
 
 
@@ -140,6 +163,9 @@
             .stat-card { padding: 14px; border-radius: 16px; }
             .stat-card div { font-size: 1.55rem; }
             table { min-width: 720px; }
+            .packing-grid { grid-template-columns:1fr; }
+            .pack-card { padding:16px; border-radius:18px; }
+            .pack-no { font-size:1.65rem; }
             #view-stock > div { flex-direction: column; }
             .modal { width: 94%; padding: 22px; border-radius: 22px; }
             .opt-btn { padding: 14px; font-size: 1rem; }
@@ -222,6 +248,28 @@
             </table>
         </div>
 
+
+
+        <div id="view-packing" class="view">
+            <div class="packing-toolbar">
+                <div>
+                    <h2 style="font-family:'Bebas Neue'; margin:0;">PAPERLESS PACKING</h2>
+                    <div style="font-weight:800; color:#64748b; font-size:.9rem;">Checkout order akan terus masuk sini untuk staff packing.</div>
+                </div>
+                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                    <button id="filter-pending" class="pill-filter active" onclick="setPackingFilter('Pending')">Pending</button>
+                    <button id="filter-packed" class="pill-filter" onclick="setPackingFilter('Packed')">Packed</button>
+                    <button id="filter-all" class="pill-filter" onclick="setPackingFilter('All')">All</button>
+                </div>
+            </div>
+            <div class="stats-grid">
+                <div class="stat-card" style="border-color:var(--orange)"><h3>Pending Packing</h3><div id="pack-pending-count">0</div></div>
+                <div class="stat-card" style="border-color:var(--teal)"><h3>Packed Today</h3><div id="pack-packed-count">0</div></div>
+                <div class="stat-card" style="border-color:#3b82f6"><h3>Total Queue</h3><div id="pack-total-count">0</div></div>
+            </div>
+            <div id="packing-grid" class="packing-grid"></div>
+        </div>
+
         <div id="view-stock" class="view">
             <h2 style="font-family:'Bebas Neue';">INVENTORY</h2>
             <div style="background:white; padding:15px; border-radius:15px; margin-bottom:15px; display:flex; gap:10px;">
@@ -240,6 +288,7 @@
         <nav class="bottom-nav">
             <button id="nav-pos" class="nav-btn active" onclick="switchView('pos')">🛒 SALES</button>
             <button id="nav-reports" class="nav-btn" onclick="switchView('reports')">📈 ANALYTICS</button>
+            <button id="nav-packing" class="nav-btn" onclick="switchView('packing')">📋 PACKING</button>
             <button id="nav-stock" class="nav-btn" onclick="switchView('stock')">📦 INVENTORY</button>
         </nav>
     </main>
@@ -267,8 +316,8 @@
                 <input type="number" id="cash-in" class="edit-input" style="font-size:1.5rem; text-align:center;" placeholder="Cash In" oninput="doMath()">
                 <div style="text-align:center; margin-top:10px; font-weight:800; color:var(--teal);">CHANGE: <span id="change-out">RM 0.00</span></div>
             </div>
-            <button class="btn-side" style="background:var(--teal)" onclick="processSale(false)">COMPLETE SALE</button>
-            <button class="btn-side" style="background:var(--dark)" onclick="processSale(true)">PRINT RECEIPT</button>
+            <button id="complete-sale-btn" class="btn-side checkout-action" style="background:var(--teal)" onclick="processSale(false)">COMPLETE SALE</button>
+            <button id="print-receipt-btn" class="btn-side checkout-action" style="background:var(--dark)" onclick="processSale(true)">PRINT RECEIPT</button>
             <button class="btn-side" style="background:none; color:#999" onclick="closeModal('pay-modal')">BACK</button>
         </div>
     </div>
@@ -294,7 +343,10 @@
         let products = [];
         let cart = [];
         let sales = [];
+        let packingOrders = [];
         let payMethod = 'Cash';
+        let packingFilter = 'Pending';
+        let isProcessingSale = false;
 
         function showStatus(msg, error = false) {
             let el = document.getElementById('sync-status');
@@ -308,8 +360,8 @@
             el.style.background = error ? '#ef4444' : '#10b981';
         }
 
-        async function loadData() {
-            showStatus('SYNCING...');
+        async function loadData(showSync = true) {
+            if (showSync) showStatus('SYNCING...');
             const { data: p, error: pe } = await db.from('products').select('*').order('id', { ascending: true });
             const { data: s, error: se } = await db.from('sales').select('*').order('id', { ascending: true });
 
@@ -319,6 +371,7 @@
                 products = defaultProducts;
                 sales = [];
                 renderMenu();
+                await loadPackingOrders();
                 return;
             }
 
@@ -342,9 +395,152 @@
             renderMenu();
             if (document.getElementById('view-reports').classList.contains('active-view')) renderReports();
             if (document.getElementById('view-stock').classList.contains('active-view')) renderStock();
+            await loadPackingOrders();
         }
 
-        function subscribeSync() { showStatus('SYNC READY'); }
+        function subscribeSync() {
+            showStatus('SYNC READY');
+            try {
+                db.channel('crunch-lab-live')
+                    .on('postgres_changes', { event: '*', schema: 'public', table: 'packing_orders' }, () => loadPackingOrders())
+                    .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, () => loadData(false))
+                    .subscribe();
+            } catch (err) {
+                console.log('Realtime not active, polling fallback used.', err);
+            }
+        }
+
+        function localPackKey() { return 'crunch_lab_packing_orders_v1'; }
+        function savePackingLocal() { localStorage.setItem(localPackKey(), JSON.stringify(packingOrders)); }
+        function readPackingLocal() {
+            try { return JSON.parse(localStorage.getItem(localPackKey()) || '[]'); }
+            catch { return []; }
+        }
+
+        function makeOrderNo() {
+            const now = new Date();
+            const d = String(now.getDate()).padStart(2,'0');
+            const m = String(now.getMonth()+1).padStart(2,'0');
+            const tail = String(now.getTime()).slice(-4);
+            return `CL-${d}${m}-${tail}`;
+        }
+
+        function normaliseItems(items) {
+            if (Array.isArray(items)) return items;
+            if (typeof items === 'string') {
+                try { return JSON.parse(items); } catch { return []; }
+            }
+            return [];
+        }
+
+        async function loadPackingOrders() {
+            try {
+                const { data, error } = await db.from('packing_orders').select('*').order('created_at', { ascending: false });
+                if (error) throw error;
+                packingOrders = (data || []).map(o => ({ ...o, items: normaliseItems(o.items) }));
+                showStatus('PACKING SYNCED');
+            } catch (err) {
+                console.warn('Packing Supabase fallback:', err);
+                packingOrders = readPackingLocal();
+                showStatus('PACKING LOCAL MODE', true);
+            }
+            renderPacking();
+        }
+
+        async function savePackingOrder(order) {
+            packingOrders.unshift(order);
+            savePackingLocal();
+            renderPacking();
+            try {
+                const { error } = await db.from('packing_orders').upsert(order);
+                if (error) throw error;
+                showStatus('PACKING ORDER SENT');
+                await loadPackingOrders();
+            } catch (err) {
+                console.warn('Packing order saved locally only:', err);
+                showStatus('PACKING SAVED LOCAL ONLY', true);
+            }
+        }
+
+        async function updatePackingStatus(id, status) {
+            const order = packingOrders.find(o => String(o.id) === String(id));
+            if (!order) return;
+            order.status = status;
+            order.packed_at = status === 'Packed' ? new Date().toISOString() : null;
+            savePackingLocal();
+            renderPacking();
+            try {
+                const { error } = await db.from('packing_orders').update({ status: order.status, packed_at: order.packed_at }).eq('id', id);
+                if (error) throw error;
+                showStatus('PACKING UPDATED');
+            } catch (err) {
+                console.warn(err);
+                showStatus('PACKING UPDATE LOCAL ONLY', true);
+            }
+        }
+
+        async function deletePackingOrder(id) {
+            if (!confirm('Delete this packing order?')) return;
+            packingOrders = packingOrders.filter(o => String(o.id) !== String(id));
+            savePackingLocal();
+            renderPacking();
+            try {
+                const { error } = await db.from('packing_orders').delete().eq('id', id);
+                if (error) throw error;
+                showStatus('PACKING DELETED');
+            } catch (err) {
+                console.warn(err);
+                showStatus('DELETE LOCAL ONLY', true);
+            }
+        }
+
+        function setPackingFilter(filter) {
+            packingFilter = filter;
+            ['Pending','Packed','All'].forEach(f => {
+                const el = document.getElementById('filter-' + f.toLowerCase());
+                if (el) el.classList.toggle('active', packingFilter === f);
+            });
+            renderPacking();
+        }
+
+        function renderPacking() {
+            const grid = document.getElementById('packing-grid');
+            if (!grid) return;
+            const pending = packingOrders.filter(o => (o.status || 'Pending') === 'Pending').length;
+            const packed = packingOrders.filter(o => (o.status || 'Pending') === 'Packed').length;
+            const pc = document.getElementById('pack-pending-count');
+            const kc = document.getElementById('pack-packed-count');
+            const tc = document.getElementById('pack-total-count');
+            if (pc) pc.innerText = pending;
+            if (kc) kc.innerText = packed;
+            if (tc) tc.innerText = packingOrders.length;
+
+            const visible = packingOrders.filter(o => packingFilter === 'All' ? true : (o.status || 'Pending') === packingFilter);
+            if (visible.length === 0) {
+                grid.innerHTML = `<div class="empty-state">No ${packingFilter.toLowerCase()} packing order.</div>`;
+                return;
+            }
+
+            grid.innerHTML = visible.map(o => {
+                const items = normaliseItems(o.items);
+                const status = o.status || 'Pending';
+                const rows = items.map(i => `<div class="pack-row"><span>${i.qty}x ${i.name}</span><span>✓</span></div>`).join('');
+                return `<div class="pack-card">
+                    <div class="pack-head">
+                        <div>
+                            <div class="pack-no">${o.order_no || o.id}</div>
+                            <div class="pack-meta">${o.time || ''} • RM ${Number(o.total || 0).toFixed(2)}</div>
+                        </div>
+                        <span class="pack-status ${status === 'Packed' ? 'packed' : ''}">${status}</span>
+                    </div>
+                    <div class="pack-items">${rows}</div>
+                    <div class="pack-actions">
+                        ${status !== 'Packed' ? `<button class="pack-btn green" onclick="updatePackingStatus('${o.id}','Packed')">✅ MARK PACKED</button>` : `<button class="pack-btn dark" onclick="updatePackingStatus('${o.id}','Pending')">↩️ REOPEN</button>`}
+                        <button class="pack-btn red" onclick="deletePackingOrder('${o.id}')">DELETE</button>
+                    </div>
+                </div>`;
+            }).join('');
+        }
 
         async function saveProduct(product) {
             const clean = {
@@ -466,46 +662,100 @@
             document.getElementById('change-out').innerText = `RM ${Math.max(0, i-t).toFixed(2)}`;
         }
 
-        async function processSale(printReceipt = false) {
-            const t = parseFloat(document.getElementById('total-val').innerText.replace('RM ', ''));
-            if(t <= 0) return;
-            let cTotal = 0;
-            
-            // Build Receipt Content
-            let receiptItemsHtml = "";
-            cart.forEach(i => {
-                const p = products.find(x => x.id === i.pid);
-                if(p) { 
-                    p.stock -= i.qty; 
-                    cTotal += (parseFloat(p.cost) * i.qty); 
-                }
-                receiptItemsHtml += `<div style="display:flex; justify-content:space-between; font-size:12px;"><span>${i.qty}x ${i.name}</span><span>RM ${(i.qty * i.price).toFixed(2)}</span></div>`;
+        function setCheckoutButtons(disabled) {
+            document.querySelectorAll('.checkout-action').forEach(btn => {
+                btn.disabled = disabled;
+                btn.style.opacity = disabled ? '0.55' : '1';
+                btn.style.cursor = disabled ? 'not-allowed' : 'pointer';
             });
+        }
 
-            const newSale = {
-                id: Date.now(),
-                time: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}),
-                date: new Date().toLocaleString(),
-                details: cart.map(i => `${i.qty}x ${i.name}`).join(', '),
-                method: payMethod,
-                total: parseFloat(t),
-                profit: parseFloat(t - cTotal)
-            };
+        async function processSale(printReceipt = false) {
+            if (isProcessingSale) return;
+            if (!cart.length) return;
+            isProcessingSale = true;
+            setCheckoutButtons(true);
 
-            sales.push(newSale);
-            await saveSale(newSale);
-            await saveAllProducts();
+            try {
+                const t = parseFloat(document.getElementById('total-val').innerText.replace('RM ', '')) || 0;
+                if(t <= 0) return;
 
-            // Receipt only prints when selected
-            document.getElementById('r-date').innerText = newSale.date;
-            document.getElementById('r-items').innerHTML = receiptItemsHtml;
-            document.getElementById('r-total').innerText = `RM ${t.toFixed(2)}`;
-            
-            if (printReceipt) {
-                window.print();
+                if (payMethod === 'Cash') {
+                    const cashIn = parseFloat(document.getElementById('cash-in').value) || 0;
+                    if (cashIn < t) {
+                        alert('Cash received is less than total.');
+                        return;
+                    }
+                }
+
+                let cTotal = 0;
+                let receiptItemsHtml = "";
+                const currentCart = cart.map(i => ({ ...i }));
+                const orderId = `CL-${Date.now()}-${Math.floor(Math.random() * 9999)}`;
+                const orderNo = makeOrderNo();
+
+                // Clear cart early to prevent duplicate submit.
+                cart = [];
+                updateUI();
+
+                currentCart.forEach(i => {
+                    const p = products.find(x => x.id === i.pid);
+                    if(p) {
+                        p.stock = Math.max(0, Number(p.stock) - Number(i.qty));
+                        cTotal += (parseFloat(p.cost) * i.qty);
+                    }
+                    receiptItemsHtml += `<div style="display:flex; justify-content:space-between; font-size:12px;"><span>${i.qty}x ${i.name}</span><span>RM ${(i.qty * i.price).toFixed(2)}</span></div>`;
+                });
+
+                const now = new Date();
+                const newSale = {
+                    id: Date.now(),
+                    time: now.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}),
+                    date: now.toLocaleString(),
+                    details: currentCart.map(i => `${i.qty}x ${i.name}`).join(', '),
+                    method: payMethod,
+                    total: parseFloat(t),
+                    profit: parseFloat(t - cTotal)
+                };
+
+                const packOrder = {
+                    id: orderId,
+                    order_no: orderNo,
+                    time: newSale.time,
+                    date: newSale.date,
+                    details: newSale.details,
+                    method: payMethod,
+                    total: parseFloat(t),
+                    status: 'Pending',
+                    items: currentCart.map(i => ({ name: i.name, qty: i.qty, price: Number(i.price) })),
+                    packed_at: null,
+                    created_at: now.toISOString()
+                };
+
+                sales.push(newSale);
+                await saveSale(newSale);
+                await saveAllProducts();
+                await savePackingOrder(packOrder);
+
+                document.getElementById('r-date').innerText = `${newSale.date} • ${orderNo}`;
+                document.getElementById('r-items').innerHTML = receiptItemsHtml;
+                document.getElementById('r-total').innerText = `RM ${t.toFixed(2)}`;
+
+                if (printReceipt) window.print();
+
+                renderMenu();
+                if (document.getElementById('view-reports').classList.contains('active-view')) renderReports();
+                if (document.getElementById('view-packing').classList.contains('active-view')) renderPacking();
+                closeModal('pay-modal');
+                document.getElementById('cash-in').value = '';
+                doMath();
+            } catch (err) {
+                console.error(err);
+                alert('System error while processing sale. Sale was stopped before duplicate order. Check Console for details.');
+            } finally {
+                isProcessingSale = false;
+                setCheckoutButtons(false);
             }
-
-            cart=[]; updateUI(); renderMenu(); closeModal('pay-modal');
         }
 
         function renderReports() {
@@ -587,6 +837,7 @@
             document.getElementById('nav-'+v).classList.add('active');
             if(v==='reports') { await loadData(); renderReports(); }
             if(v==='stock') { await loadData(); renderStock(); }
+            if(v==='packing') { await loadPackingOrders(); renderPacking(); }
         }
 
         function openCheckout() { if(cart.length>0) { document.getElementById('modal-total').innerText = document.getElementById('total-val').innerText; document.getElementById('pay-modal').style.display = 'flex'; } }
@@ -628,7 +879,7 @@
 
         loadData();
         subscribeSync();
-        setInterval(loadData, 5000);
+        setInterval(() => loadData(false), 12000);
     </script>
 </body>
 </html>
