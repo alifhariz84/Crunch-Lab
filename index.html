@@ -331,13 +331,16 @@
         const SUPABASE_KEY = "sb_publishable_9m30QqCS2ttu9td6F84ogQ_JizwPY3v";
         const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+        const BRAND_NAME = 'Crunch Lab';
+        let CRUNCH_BRAND_ID = null;
+
         const defaultProducts = [
-            { id: 1, name: 'CRUNCH CUT CHICKEN', price: 10.00, cost: 4.50, stock: 50, is_fries: false, image_url: '' },
-            { id: 2, name: 'CRUNCH TENDERS', price: 12.00, cost: 5.50, stock: 40, is_fries: false, image_url: '' },
-            { id: 3, name: 'CRUNCH FRIES', price: 5.00, cost: 2.00, stock: 100, is_fries: true, image_url: '' },
-            { id: 4, name: 'NUGGET 6 PCS', price: 6.00, cost: 2.50, stock: 60, is_fries: false, image_url: '' },
-            { id: 5, name: 'NUGGET 9 PCS', price: 8.00, cost: 3.50, stock: 40, is_fries: false, image_url: '' },
-            { id: 6, name: 'WINGETTES & DRUMETTES', price: 9.00, cost: 4.00, stock: 30, is_fries: false, image_url: '' }
+            { name: 'CRUNCH CUT CHICKEN', price: 10.00, cost: 4.50, stock: 50, is_fries: false, image_url: '', category: 'Food' },
+            { name: 'CRUNCH TENDERS', price: 12.00, cost: 5.50, stock: 40, is_fries: false, image_url: '', category: 'Food' },
+            { name: 'CRUNCH FRIES', price: 5.00, cost: 2.00, stock: 100, is_fries: true, image_url: '', category: 'Food' },
+            { name: 'NUGGET 6 PCS', price: 6.00, cost: 2.50, stock: 60, is_fries: false, image_url: '', category: 'Food' },
+            { name: 'NUGGET 9 PCS', price: 8.00, cost: 3.50, stock: 40, is_fries: false, image_url: '', category: 'Food' },
+            { name: 'WINGETTES & DRUMETTES', price: 9.00, cost: 4.00, stock: 30, is_fries: false, image_url: '', category: 'Food' }
         ];
 
         let products = [];
@@ -360,42 +363,61 @@
             el.style.background = error ? '#ef4444' : '#10b981';
         }
 
+        function safeText(value) {
+            return String(value ?? '').replace(/'/g, "\'").replace(/\n/g, ' ');
+        }
+
+        function productById(id) {
+            return products.find(x => String(x.id) === String(id));
+        }
+
+        async function getCrunchBrandId() {
+            if (CRUNCH_BRAND_ID) return CRUNCH_BRAND_ID;
+            const { data, error } = await db.from('brands').select('id,name').eq('name', BRAND_NAME).maybeSingle();
+            if (!error && data?.id) {
+                CRUNCH_BRAND_ID = data.id;
+                return CRUNCH_BRAND_ID;
+            }
+            const { data: inserted, error: insertError } = await db.from('brands').insert({ name: BRAND_NAME, type: 'Food / POS' }).select('id').single();
+            if (insertError) throw insertError;
+            CRUNCH_BRAND_ID = inserted.id;
+            return CRUNCH_BRAND_ID;
+        }
+
         async function loadData(showSync = true) {
             if (showSync) showStatus('SYNCING...');
-            const { data: p, error: pe } = await db.from('products').select('*').order('id', { ascending: true });
-            const { data: s, error: se } = await db.from('sales').select('*').order('id', { ascending: true });
-
-            if (pe || se) {
-                console.error(pe || se);
+            try {
+                const brandId = await getCrunchBrandId();
+                let { data: p, error: pe } = await db.from('products').select('*').eq('brand', BRAND_NAME).order('created_at', { ascending: true });
+                if (pe) {
+                    const fallback = await db.from('products').select('*').eq('brand_id', brandId).order('created_at', { ascending: true });
+                    p = fallback.data;
+                    pe = fallback.error;
+                }
+                const { data: s, error: se } = await db.from('sales').select('*').eq('brand', BRAND_NAME).order('created_at', { ascending: true });
+                if (pe || se) throw (pe || se);
+                products = (p || []).map(x => ({ ...x, stock: Number(x.stock ?? x.stock_qty ?? 0), price: Number(x.price ?? 0), cost: Number(x.cost ?? 0), is_fries: Boolean(x.is_fries) }));
+                sales = (s || []).map(x => ({ ...x, total: Number(x.total ?? x.total_amount ?? 0), method: x.method || x.payment_method || '', time: x.time || new Date(x.created_at || Date.now()).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}), details: x.details || x.receipt_no || '' }));
+                if (products.length === 0) {
+                    const seed = defaultProducts.map(x => ({ ...x, brand: BRAND_NAME, brand_id: brandId, is_active: true }));
+                    const { error } = await db.from('products').insert(seed);
+                    if (error) throw error;
+                    showStatus('DEFAULT MENU ADDED');
+                    return loadData(false);
+                }
+                showStatus('SYNCED TO RIZ DASHBOARD');
+                renderMenu();
+                if (document.getElementById('view-reports').classList.contains('active-view')) renderReports();
+                if (document.getElementById('view-stock').classList.contains('active-view')) renderStock();
+                await loadPackingOrders();
+            } catch (err) {
+                console.error(err);
                 showStatus('SUPABASE ERROR - CHECK SQL/POLICY', true);
-                products = defaultProducts;
+                products = defaultProducts.map((x, idx) => ({...x, id: 'local-' + idx}));
                 sales = [];
                 renderMenu();
                 await loadPackingOrders();
-                return;
             }
-
-            products = p || [];
-            sales = s || [];
-
-            if (products.length === 0) {
-                const { error } = await db.from('products').upsert(defaultProducts);
-                if (error) {
-                    console.error(error);
-                    showStatus('SETUP ERROR', true);
-                    products = defaultProducts;
-                } else {
-                    products = defaultProducts;
-                    showStatus('DEFAULT MENU ADDED');
-                }
-            } else {
-                showStatus('SYNCED');
-            }
-
-            renderMenu();
-            if (document.getElementById('view-reports').classList.contains('active-view')) renderReports();
-            if (document.getElementById('view-stock').classList.contains('active-view')) renderStock();
-            await loadPackingOrders();
         }
 
         function subscribeSync() {
@@ -404,6 +426,7 @@
                 db.channel('crunch-lab-live')
                     .on('postgres_changes', { event: '*', schema: 'public', table: 'packing_orders' }, () => loadPackingOrders())
                     .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, () => loadData(false))
+                    .on('postgres_changes', { event: '*', schema: 'public', table: 'sales' }, () => loadData(false))
                     .subscribe();
             } catch (err) {
                 console.log('Realtime not active, polling fallback used.', err);
@@ -543,54 +566,35 @@
         }
 
         async function saveProduct(product) {
-            const clean = {
-                id: product.id,
-                name: product.name,
-                price: Number(product.price),
-                cost: Number(product.cost),
-                stock: Number(product.stock),
-                is_fries: Boolean(product.is_fries),
-                image_url: product.image_url || ''
-            };
-            const { error } = await db.from('products').upsert(clean);
-            if (error) {
-                console.error(error);
-                showStatus('SAVE ERROR', true);
-                alert('Cannot save to Supabase. Check table/policy.');
-            } else {
-                showStatus('SAVED');
-            }
+            const brandId = await getCrunchBrandId();
+            const clean = { name: String(product.name || '').toUpperCase(), brand: BRAND_NAME, brand_id: brandId, category: product.category || 'Food', price: Number(product.price || 0), cost: Number(product.cost || 0), stock: Number(product.stock || 0), is_fries: Boolean(product.is_fries), image_url: product.image_url || '', is_active: true };
+            let result;
+            if (product.id && !String(product.id).startsWith('local-')) result = await db.from('products').update(clean).eq('id', product.id).select().single();
+            else result = await db.from('products').insert(clean).select().single();
+            if (result.error) { console.error(result.error); showStatus('SAVE ERROR', true); alert('Cannot save to Supabase. Check table/policy.'); }
+            else { Object.assign(product, result.data); showStatus('SAVED TO DASHBOARD'); }
         }
 
         async function saveAllProducts() {
-            const cleanProducts = products.map(p => ({
-                id: p.id,
-                name: p.name,
-                price: Number(p.price),
-                cost: Number(p.cost),
-                stock: Number(p.stock),
-                is_fries: Boolean(p.is_fries),
-                image_url: p.image_url || ''
-            }));
-            const { error } = await db.from('products').upsert(cleanProducts);
-            if (error) {
-                console.error(error);
-                showStatus('STOCK SAVE ERROR', true);
-                alert('Cannot update stock in Supabase. Check table/policy.');
-            } else {
-                showStatus('STOCK UPDATED');
+            const brandId = await getCrunchBrandId();
+            for (const p of products) {
+                if (!p.id || String(p.id).startsWith('local-')) continue;
+                const { error } = await db.from('products').update({ brand: BRAND_NAME, brand_id: brandId, stock: Number(p.stock || 0), price: Number(p.price || 0), cost: Number(p.cost || 0), image_url: p.image_url || '', is_fries: Boolean(p.is_fries) }).eq('id', p.id);
+                if (error) { console.error(error); showStatus('STOCK SAVE ERROR', true); alert('Cannot update stock in Supabase. Check table/policy.'); return; }
             }
+            showStatus('STOCK SYNCED TO DASHBOARD');
         }
 
         async function saveSale(sale) {
-            const { error } = await db.from('sales').insert(sale);
-            if (error) {
-                console.error(error);
-                showStatus('SALE SAVE ERROR', true);
-                alert('Sale not saved to Supabase. Check table/policy.');
-            } else {
-                showStatus('SALE SAVED');
-            }
+            const brandId = await getCrunchBrandId();
+            const saleRow = { brand: BRAND_NAME, brand_id: brandId, receipt_no: sale.receipt_no, total: Number(sale.total || 0), total_amount: Number(sale.total || 0), payment_method: sale.method, method: sale.method, details: sale.details, profit: Number(sale.profit || 0), time: sale.time, date: sale.date };
+            const { data, error } = await db.from('sales').insert(saleRow).select('id').single();
+            if (error) { console.error(error); showStatus('SALE SAVE ERROR', true); alert('Sale not saved to Supabase. Check table/policy.'); return null; }
+            const saleId = data.id;
+            const items = (sale.items || []).map(i => ({ sale_id: saleId, product_id: i.pid || null, product_name: i.name, qty: Number(i.qty || 1), price: Number(i.price || 0), subtotal: Number(i.qty || 1) * Number(i.price || 0) }));
+            if (items.length) await db.from('sales_items').insert(items);
+            showStatus('SALE SENT TO RIZ DASHBOARD');
+            return saleId;
         }
 
         function updateClock() {
@@ -601,23 +605,25 @@
 
         function renderMenu() {
             document.getElementById('menu-grid').innerHTML = products.map(p => `
-                <div class="best-card" onclick="handleItem(${p.id})">
-                    <span style="position:absolute; top:8px; right:12px; font-size:0.7rem; font-weight:800; color:#ef4444;">${p.stock} left</span>
-                    ${p.image_url ? `<img src="${p.image_url}" class="product-photo" alt="${p.name}">` : `<div class="product-photo-empty">🍗</div>`}
+                <div class="best-card" onclick="handleItem('${safeText(p.id)}')">
+                    <span style="position:absolute; top:8px; right:12px; font-size:0.7rem; font-weight:800; color:#ef4444;">${Number(p.stock || 0)} left</span>
+                    ${p.image_url ? `<img src="${p.image_url}" class="product-photo" alt="${safeText(p.name)}">` : `<div class="product-photo-empty">🍗</div>`}
                     <strong>${p.name}</strong>
                     <div class="best-price-tag">RM ${Number(p.price).toFixed(2)}</div>
                 </div>`).join('');
         }
 
         function handleItem(id) {
-            const p = products.find(x => x.id === id);
-            if(p.stock <= 0) return alert("OUT OF STOCK");
+            const p = productById(id);
+            if(!p) return;
+            if(Number(p.stock || 0) <= 0) return alert("OUT OF STOCK");
             if(p.is_fries) document.getElementById('fries-modal').style.display = 'flex';
             else addToCart(p.name, p.price, p.cost, p.id);
         }
 
         function confirmFries(flavor) {
             const p = products.find(x => x.is_fries);
+            if (!p) return;
             addToCart(`${p.name} (${flavor})`, p.price, p.cost, p.id);
             closeModal('fries-modal');
         }
@@ -699,7 +705,7 @@
                 updateUI();
 
                 currentCart.forEach(i => {
-                    const p = products.find(x => x.id === i.pid);
+                    const p = productById(i.pid);
                     if(p) {
                         p.stock = Math.max(0, Number(p.stock) - Number(i.qty));
                         cTotal += (parseFloat(p.cost) * i.qty);
@@ -714,8 +720,10 @@
                     date: now.toLocaleString(),
                     details: currentCart.map(i => `${i.qty}x ${i.name}`).join(', '),
                     method: payMethod,
+                    receipt_no: orderNo,
                     total: parseFloat(t),
-                    profit: parseFloat(t - cTotal)
+                    profit: parseFloat(t - cTotal),
+                    items: currentCart
                 };
 
                 const packOrder = {
@@ -764,7 +772,7 @@
                 const total = parseFloat(s.total) || 0;
                 const profit = parseFloat(s.profit) || 0;
                 r += total; p += profit;
-                return `<tr><td>${s.time}</td><td><small>${s.details}</small></td><td>${s.method}</td><td>RM ${total.toFixed(2)}</td><td><button onclick="delSale(${s.id})" style="color:red; background:none; border:none; cursor:pointer;">🗑️</button></td></tr>`;
+                return `<tr><td>${s.time}</td><td><small>${s.details}</small></td><td>${s.method}</td><td>RM ${total.toFixed(2)}</td><td><button onclick="delSale('${safeText(s.id)}')" style="color:red; background:none; border:none; cursor:pointer;">🗑️</button></td></tr>`;
             }).reverse().join('');
             document.getElementById('stat-revenue').innerText = `RM ${r.toFixed(2)}`;
             document.getElementById('stat-profit').innerText = `RM ${p.toFixed(2)}`;
@@ -777,14 +785,14 @@
                     <td>
                         ${p.image_url ? `<img src="${p.image_url}" class="thumb-preview">` : `<div class="thumb-preview" style="display:flex;align-items:center;justify-content:center;">🍗</div>`}
                         <br><label class="img-upload-label">UPLOAD
-                            <input type="file" accept="image/*" onchange="uploadProductImage(${p.id}, this.files[0])" style="display:none;">
+                            <input type="file" accept="image/*" onchange="uploadProductImage('${safeText(p.id)}', this.files[0])" style="display:none;">
                         </label>
                     </td>
-                    <td><input type="text" class="edit-input" value="${p.name}" onchange="editItem(${p.id},'name',this.value)"></td>
-                    <td><b>${p.stock}</b> <button onclick="addStock(${p.id})">+</button></td>
-                    <td><input type="number" class="edit-input" value="${p.price}" onchange="editItem(${p.id},'price',this.value)"></td>
-                    <td><input type="number" class="edit-input" value="${p.cost}" onchange="editItem(${p.id},'cost',this.value)"></td>
-                    <td><button onclick="delItem(${p.id})" style="color:red; background:none; border:none; cursor:pointer;">DEL</button></td>
+                    <td><input type="text" class="edit-input" value="${safeText(p.name)}" onchange="editItem('${safeText(p.id)}','name',this.value)"></td>
+                    <td><b>${Number(p.stock || 0)}</b> <button onclick="addStock('${safeText(p.id)}')">+</button></td>
+                    <td><input type="number" class="edit-input" value="${Number(p.price || 0)}" onchange="editItem('${safeText(p.id)}','price',this.value)"></td>
+                    <td><input type="number" class="edit-input" value="${Number(p.cost || 0)}" onchange="editItem('${safeText(p.id)}','cost',this.value)"></td>
+                    <td><button onclick="delItem('${safeText(p.id)}')" style="color:red; background:none; border:none; cursor:pointer;">DEL</button></td>
                 </tr>`).join('');
         }
 
@@ -800,19 +808,17 @@
 
         async function uploadProductImage(id, file) {
             if (!file) return;
-            const p = products.find(x => x.id === id);
+            const p = productById(id);
             if (!p) return;
             showStatus('UPLOADING IMAGE...');
             p.image_url = await fileToBase64(file);
             await saveProduct(p);
-            renderStock();
-            renderMenu();
+            renderStock(); renderMenu();
         }
-
-        async function editItem(id, f, v) { const p = products.find(x => x.id === id); p[f] = (f==='name')?v.toUpperCase():parseFloat(v); await saveProduct(p); renderMenu(); }
-        async function addStock(id) { const q = prompt("Qty:"); if(q) { const p = products.find(x => x.id === id); p.stock += parseInt(q); await saveProduct(p); renderStock(); renderMenu(); } }
-        async function delSale(id) { sales = sales.filter(x => x.id !== id); await db.from('sales').delete().eq('id', id); renderReports(); }
-        async function delItem(id) { products = products.filter(x => x.id !== id); await db.from('products').delete().eq('id', id); renderStock(); renderMenu(); }
+        async function editItem(id, f, v) { const p = productById(id); if (!p) return; p[f] = (f === 'name') ? v.toUpperCase() : parseFloat(v); await saveProduct(p); renderMenu(); }
+        async function addStock(id) { const q = prompt("Qty:"); if(q) { const p = productById(id); if (!p) return; p.stock = Number(p.stock || 0) + parseInt(q); await saveProduct(p); renderStock(); renderMenu(); } }
+        async function delSale(id) { sales = sales.filter(x => String(x.id) !== String(id)); await db.from('sales').delete().eq('id', id); renderReports(); }
+        async function delItem(id) { products = products.filter(x => String(x.id) !== String(id)); await db.from('products').delete().eq('id', id); renderStock(); renderMenu(); }
         async function addNewProduct() {
             const n = document.getElementById('new-name').value;
             const pr = parseFloat(document.getElementById('new-price').value);
@@ -820,9 +826,9 @@
             const imgFile = document.getElementById('new-image').files[0];
             if(!n || isNaN(pr)) return;
             const imageUrl = imgFile ? await fileToBase64(imgFile) : '';
-            const newProduct = { id: Date.now(), name: n.toUpperCase(), price: pr, cost: co, stock: 0, is_fries: false, image_url: imageUrl };
-            products.push(newProduct);
+            const newProduct = { name: n.toUpperCase(), price: pr, cost: co, stock: 0, is_fries: false, image_url: imageUrl, category: 'Food' };
             await saveProduct(newProduct);
+            products.push(newProduct);
             document.getElementById('new-name').value = '';
             document.getElementById('new-price').value = '';
             document.getElementById('new-cost').value = '';
