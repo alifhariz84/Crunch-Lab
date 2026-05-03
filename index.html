@@ -421,15 +421,15 @@
             if (showSync) showStatus('SYNCING...');
             try {
                 const brandId = await getCrunchBrandId();
-                let { data: p, error: pe } = await db.from('products').select('*').eq('brand', BRAND_NAME).order('priority', { ascending: true }).order('name', { ascending: true });
+                let { data: p, error: pe } = await db.from('products').select('*').eq('brand', BRAND_NAME).eq('is_active', true).order('priority', { ascending: true }).order('name', { ascending: true });
                 if (pe) {
-                    const fallback = await db.from('products').select('*').eq('brand_id', brandId).order('priority', { ascending: true }).order('name', { ascending: true });
+                    const fallback = await db.from('products').select('*').eq('brand_id', brandId).eq('is_active', true).order('priority', { ascending: true }).order('name', { ascending: true });
                     p = fallback.data;
                     pe = fallback.error;
                 }
                 const { data: s, error: se } = await db.from('sales').select('*').eq('brand', BRAND_NAME).order('created_at', { ascending: true });
                 if (pe || se) throw (pe || se);
-                products = (p || []).map(x => ({ ...x, stock: Number(x.stock ?? x.stock_qty ?? 0), price: Number(x.price ?? 0), cost: Number(x.cost ?? 0), is_fries: Boolean(x.is_fries), priority: Number(x.priority ?? 9999) }));
+                products = (p || []).filter(x => x.is_active !== false).map(x => ({ ...x, stock: Number(x.stock ?? x.stock_qty ?? 0), price: Number(x.price ?? 0), cost: Number(x.cost ?? 0), is_fries: Boolean(x.is_fries), priority: Number(x.priority ?? 9999) }));
                 sales = (s || []).map(x => ({ ...x, total: Number(x.total ?? x.total_amount ?? 0), method: x.method || x.payment_method || '', time: x.time || new Date(x.created_at || Date.now()).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}), details: x.details || x.receipt_no || '' }));
                 if (products.length === 0) {
                     const seed = defaultProducts.map(x => ({ ...x, brand: BRAND_NAME, brand_id: brandId, is_active: true }));
@@ -612,7 +612,7 @@
             const brandId = await getCrunchBrandId();
             for (const p of products) {
                 if (!p.id || String(p.id).startsWith('local-')) continue;
-                const { error } = await db.from('products').update({ brand: BRAND_NAME, brand_id: brandId, stock: Number(p.stock || 0), price: Number(p.price || 0), cost: Number(p.cost || 0), image_url: p.image_url || '', is_fries: Boolean(p.is_fries), priority: Number(p.priority ?? 9999) }).eq('id', p.id);
+                const { error } = await db.from('products').update({ brand: BRAND_NAME, brand_id: brandId, stock: Number(p.stock || 0), price: Number(p.price || 0), cost: Number(p.cost || 0), image_url: p.image_url || '', is_fries: Boolean(p.is_fries), priority: Number(p.priority ?? 9999), is_active: p.is_active !== false }).eq('id', p.id);
                 if (error) { console.error(error); showStatus('STOCK SAVE ERROR', true); alert('Cannot update stock in Supabase. Check table/policy.'); return; }
             }
             showStatus('STOCK SYNCED TO DASHBOARD');
@@ -956,7 +956,17 @@
         async function editItem(id, f, v) { const p = productById(id); if (!p) return; p[f] = (f === 'name') ? v.toUpperCase() : parseFloat(v); await saveProduct(p); renderMenu(); }
         async function addStock(id) { const q = prompt("Qty:"); if(q) { const p = productById(id); if (!p) return; p.stock = Number(p.stock || 0) + parseInt(q); await saveProduct(p); renderStock(); renderMenu(); } }
         async function delSale(id) { sales = sales.filter(x => String(x.id) !== String(id)); await db.from('sales').delete().eq('id', id); renderReports(); }
-        async function delItem(id) { products = products.filter(x => String(x.id) !== String(id)); await db.from('products').delete().eq('id', id); renderStock(); renderMenu(); }
+        async function delItem(id) {
+            if (!confirm('Hide/delete this menu from POS and Dashboard?')) return;
+            const p = productById(id);
+            products = products.filter(x => String(x.id) !== String(id));
+            if (p && p.id && !String(p.id).startsWith('local-')) {
+                const { error } = await db.from('products').update({ is_active: false }).eq('id', p.id);
+                if (error) { console.error(error); alert('Delete failed: ' + error.message); await loadData(false); return; }
+            }
+            renderStock(); renderMenu();
+            showStatus('MENU HIDDEN FROM DASHBOARD');
+        }
         async function addNewProduct() {
             const n = document.getElementById('new-name').value;
             const pr = parseFloat(document.getElementById('new-price').value);
