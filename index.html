@@ -456,7 +456,7 @@
         function subscribeSync() {
             showStatus('SYNC READY');
             try {
-                db.channel('crunch-lab-live')
+                db.channel('pos-live-' + BRAND_NAME.toLowerCase().replace(/[^a-z0-9]/g, '-'))
                     .on('postgres_changes', { event: '*', schema: 'public', table: 'packing_orders' }, () => loadPackingOrders())
                     .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, () => loadData(false))
                     .on('postgres_changes', { event: '*', schema: 'public', table: 'sales' }, () => loadData(false))
@@ -466,7 +466,7 @@
             }
         }
 
-        function localPackKey() { return 'crunch_lab_packing_orders_v1'; }
+        function localPackKey() { return 'pos_packing_orders_' + BRAND_NAME.toLowerCase().replace(/[^a-z0-9]/g, '_'); }
         function savePackingLocal() { localStorage.setItem(localPackKey(), JSON.stringify(packingOrders)); }
         function readPackingLocal() {
             try { return JSON.parse(localStorage.getItem(localPackKey()) || '[]'); }
@@ -491,7 +491,7 @@
 
         async function loadPackingOrders() {
             try {
-                const { data, error } = await db.from('packing_orders').select('*').order('created_at', { ascending: false });
+                const { data, error } = await db.from('packing_orders').select('*').eq('brand', BRAND_NAME).order('created_at', { ascending: false });
                 if (error) throw error;
                 packingOrders = (data || []).map(o => ({ ...o, items: normaliseItems(o.items) }));
                 showStatus('PACKING SYNCED');
@@ -504,6 +504,7 @@
         }
 
         async function savePackingOrder(order) {
+            order.brand = BRAND_NAME;
             packingOrders.unshift(order);
             savePackingLocal();
             renderPacking();
@@ -866,6 +867,7 @@
 
                 const packOrder = {
                     id: orderId,
+                    brand: BRAND_NAME,
                     order_no: orderNo,
                     time: newSale.time,
                     date: newSale.date,
