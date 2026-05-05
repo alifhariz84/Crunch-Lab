@@ -74,6 +74,12 @@
         .modal { background: white; width: 90%; max-width: 400px; border-radius: 25px; padding: 30px; }
         .opt-btn { width: 100%; padding: 18px; margin-bottom: 10px; border-radius: 12px; border: 2px solid #eee; background: white; font-weight: 800; cursor: pointer; font-size: 1.1rem; }
         .opt-btn.active { background: var(--orange); color: white; border-color: var(--orange); }
+        .discount-box { background:#fff7ed; border:1px solid #fed7aa; border-radius:16px; padding:12px; margin-bottom:15px; }
+        .discount-title { font-size:.78rem; font-weight:900; color:#c2410c; margin-bottom:8px; text-transform:uppercase; }
+        .discount-row { display:flex; gap:8px; align-items:center; }
+        .discount-row select, .discount-row input { height:46px; }
+        .pay-breakdown { background:#f8fafc; border-radius:14px; padding:10px 12px; margin-bottom:12px; font-weight:900; font-size:.9rem; }
+        .pay-breakdown div { display:flex; justify-content:space-between; margin:4px 0; }
 
 
         .install-btn { background: var(--dark); color: white; border: 0; border-radius: 14px; padding: 10px 14px; font-weight: 900; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,.12); display:none; }
@@ -323,7 +329,25 @@
     <div class="modal-bg" id="pay-modal">
         <div class="modal">
             <h2 style="font-family:'Bebas Neue'; text-align:center;">PAYMENT</h2>
-            <div id="modal-total" style="font-size:2.5rem; text-align:center; font-weight:900; color:var(--orange); margin-bottom:15px;">RM 0.00</div>
+            <div id="modal-total" style="font-size:2.5rem; text-align:center; font-weight:900; color:var(--orange); margin-bottom:12px;">RM 0.00</div>
+
+            <div class="pay-breakdown">
+                <div><span>Subtotal</span><span id="pay-subtotal">RM 0.00</span></div>
+                <div><span>Discount</span><span id="pay-discount">RM 0.00</span></div>
+            </div>
+
+            <div class="discount-box">
+                <div class="discount-title">Discount</div>
+                <div class="discount-row">
+                    <select id="discount-type" class="edit-input" onchange="doMath()" style="max-width:120px; font-weight:900;">
+                        <option value="RM">RM</option>
+                        <option value="%">%</option>
+                    </select>
+                    <input type="number" id="discount-value" class="edit-input" placeholder="0.00" min="0" step="0.01" oninput="doMath()" style="font-size:1.1rem; font-weight:900; text-align:center;">
+                    <button type="button" class="arrange-btn" onclick="clearDiscount()" style="padding:12px 14px; box-shadow:none;">CLEAR</button>
+                </div>
+            </div>
+
             <div style="display:flex; gap:10px; margin-bottom:15px;">
                 <button id="m-cash" class="opt-btn active" onclick="setMethod('Cash')">💵 CASH</button>
                 <button id="m-qr" class="opt-btn" onclick="setMethod('QR')">📱 QR</button>
@@ -801,10 +825,44 @@
             document.getElementById('cash-section').style.display = (m==='Cash') ? 'block' : 'none';
         }
 
+        function cartSubtotal() {
+            return cart.reduce((sum, item) => sum + (Number(item.price || 0) * Number(item.qty || 0)), 0);
+        }
+
+        function getDiscountAmount(subtotal = cartSubtotal()) {
+            const type = document.getElementById('discount-type')?.value || 'RM';
+            const raw = parseFloat(document.getElementById('discount-value')?.value) || 0;
+            let discount = type === '%' ? subtotal * (raw / 100) : raw;
+            discount = Math.max(0, Math.min(discount, subtotal));
+            return discount;
+        }
+
+        function clearDiscount() {
+            const input = document.getElementById('discount-value');
+            if (input) input.value = '';
+            doMath();
+        }
+
+        function updateCheckoutTotals() {
+            const subtotal = cartSubtotal();
+            const discount = getDiscountAmount(subtotal);
+            const total = Math.max(0, subtotal - discount);
+
+            const subtotalEl = document.getElementById('pay-subtotal');
+            const discountEl = document.getElementById('pay-discount');
+            const totalEl = document.getElementById('modal-total');
+
+            if (subtotalEl) subtotalEl.innerText = `RM ${subtotal.toFixed(2)}`;
+            if (discountEl) discountEl.innerText = `- RM ${discount.toFixed(2)}`;
+            if (totalEl) totalEl.innerText = `RM ${total.toFixed(2)}`;
+
+            return { subtotal, discount, total };
+        }
+
         function doMath() {
-            const t = parseFloat(document.getElementById('total-val').innerText.replace('RM ', ''));
+            const totals = updateCheckoutTotals();
             const i = parseFloat(document.getElementById('cash-in').value) || 0;
-            document.getElementById('change-out').innerText = `RM ${Math.max(0, i-t).toFixed(2)}`;
+            document.getElementById('change-out').innerText = `RM ${Math.max(0, i - totals.total).toFixed(2)}`;
         }
 
         function setCheckoutButtons(disabled) {
@@ -822,8 +880,11 @@
             setCheckoutButtons(true);
 
             try {
-                const t = parseFloat(document.getElementById('total-val').innerText.replace('RM ', '')) || 0;
-                if(t <= 0) return;
+                const totals = updateCheckoutTotals();
+                const subtotal = Number(totals.subtotal || 0);
+                const discount = Number(totals.discount || 0);
+                const t = Number(totals.total || 0);
+                if(subtotal <= 0) return;
 
                 if (payMethod === 'Cash') {
                     const cashIn = parseFloat(document.getElementById('cash-in').value) || 0;
@@ -852,14 +913,24 @@
                     receiptItemsHtml += `<div style="display:flex; justify-content:space-between; font-size:12px;"><span>${i.qty}x ${i.name}</span><span>RM ${(i.qty * i.price).toFixed(2)}</span></div>`;
                 });
 
+                if (discount > 0) {
+                    receiptItemsHtml += `<div style="display:flex; justify-content:space-between; font-size:12px;"><span>DISCOUNT</span><span>- RM ${discount.toFixed(2)}</span></div>`;
+                }
+
                 const now = new Date();
+                const discountType = document.getElementById('discount-type')?.value || 'RM';
+                const discountValue = parseFloat(document.getElementById('discount-value')?.value) || 0;
+                const discountNote = discount > 0 ? ` | Discount ${discountType} ${discountValue} (-RM ${discount.toFixed(2)})` : '';
+
                 const newSale = {
                     id: Date.now(),
                     time: now.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}),
                     date: now.toLocaleString(),
-                    details: currentCart.map(i => `${i.qty}x ${i.name}`).join(', '),
+                    details: currentCart.map(i => `${i.qty}x ${i.name}`).join(', ') + discountNote,
                     method: payMethod,
                     receipt_no: orderNo,
+                    subtotal: parseFloat(subtotal),
+                    discount: parseFloat(discount),
                     total: parseFloat(t),
                     profit: parseFloat(t - cTotal),
                     items: currentCart
@@ -896,7 +967,7 @@
                 if (document.getElementById('view-packing').classList.contains('active-view')) renderPacking();
                 closeModal('pay-modal');
                 document.getElementById('cash-in').value = '';
-                doMath();
+                clearDiscount();
             } catch (err) {
                 console.error(err);
                 alert('System error while processing sale. Sale was stopped before duplicate order. Check Console for details.');
@@ -996,7 +1067,7 @@
             if(v==='packing') { await loadPackingOrders(); renderPacking(); }
         }
 
-        function openCheckout() { if(cart.length>0) { document.getElementById('modal-total').innerText = document.getElementById('total-val').innerText; document.getElementById('pay-modal').style.display = 'flex'; } }
+        function openCheckout() { if(cart.length>0) { updateCheckoutTotals(); doMath(); document.getElementById('pay-modal').style.display = 'flex'; } }
         function closeModal(id) { document.getElementById(id).style.display = 'none'; }
         function clearCart() { cart = []; updateUI(); }
 
