@@ -362,7 +362,132 @@
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-storage-compat.js"></script>
+<script>
+/* =====================================================
+   RIZ VENTURES FIREBASE BRIDGE
+   Paste your Firebase web config below.
+   Firebase Console > Project settings > Your apps > Web app
+===================================================== */
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyDEUvNHCl7AE9BuOPSQyZbC7k3OVBoPjUg",
+  authDomain: "riz-ventures.firebaseapp.com",
+  projectId: "riz-ventures",
+  storageBucket: "riz-ventures.firebasestorage.app",
+  messagingSenderId: "280069051869",
+  appId: "1:280069051869:web:7c824665016d9ec7105234",
+  measurementId: "G-LENZ81NFHR"
+};
+
+(function(){
+  if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
+  const fs = firebase.firestore();
+  const st = firebase.storage ? firebase.storage() : null;
+
+  function docToRow(doc){ return { id: doc.id, ...doc.data() }; }
+  function cleanRow(row){
+    const out = {...row};
+    Object.keys(out).forEach(k => out[k] === undefined && delete out[k]);
+    return out;
+  }
+  function makeResult(data, error=null){ return { data, error }; }
+
+  class FireQuery {
+    constructor(table){ this.table=table; this.filters=[]; this.orders=[]; this._limit=null; this.action='select'; this.payload=null; this._single=false; this._maybe=false; this.updateFilters=[]; }
+    select(){ return this; }
+    eq(field,value){ this.filters.push([field,value]); return this; }
+    order(field,opt={}){ this.orders.push([field, !!opt.ascending]); return this; }
+    limit(n){ this._limit=n; return this; }
+    single(){ this._single=true; return this.then(r=>r.data); }
+    maybeSingle(){ this._maybe=true; return this.then(r=>r.data); }
+    insert(payload){ this.action='insert'; this.payload=payload; return this; }
+    upsert(payload){ this.action='upsert'; this.payload=payload; return this; }
+    update(payload){ this.action='update'; this.payload=payload; return this; }
+    delete(){ this.action='delete'; return this; }
+    async _runSelect(){
+      let q = fs.collection(this.table);
+      this.filters.forEach(([f,v]) => { q = q.where(f, '==', v); });
+      const snap = await q.get();
+      let rows = snap.docs.map(docToRow);
+      if (this.orders.length) {
+        rows.sort((a,b)=>{
+          for (const [f,asc] of this.orders) {
+            const av = a[f] ?? ''; const bv = b[f] ?? '';
+            const cmp = String(av).localeCompare(String(bv), undefined, {numeric:true, sensitivity:'base'});
+            if (cmp !== 0) return asc ? cmp : -cmp;
+          }
+          return 0;
+        });
+      }
+      if (this._limit) rows = rows.slice(0, this._limit);
+      if (this._single || this._maybe) return rows[0] || null;
+      return rows;
+    }
+    async _runInsert(){
+      const arr = Array.isArray(this.payload) ? this.payload : [this.payload];
+      const out=[];
+      for (const raw of arr){
+        const row = cleanRow(raw||{});
+        row.created_at = row.created_at || new Date().toISOString();
+        row.updated_at = new Date().toISOString();
+        let ref;
+        if (row.id && typeof row.id === 'string') { ref = fs.collection(this.table).doc(row.id); await ref.set(row, {merge:true}); }
+        else { ref = await fs.collection(this.table).add(row); await ref.set({id:ref.id},{merge:true}); }
+        const got = await ref.get(); out.push(docToRow(got));
+      }
+      return (this._single || !Array.isArray(this.payload)) ? out[0] : out;
+    }
+    async _runUpdate(){
+      let q = fs.collection(this.table);
+      this.filters.forEach(([f,v]) => { q = q.where(f, '==', v); });
+      const snap = await q.get();
+      const batch = fs.batch();
+      snap.docs.forEach(d => batch.update(d.ref, cleanRow({...this.payload, updated_at:new Date().toISOString()})));
+      await batch.commit();
+      const rows = [];
+      for (const d of snap.docs){ const nd = await d.ref.get(); rows.push(docToRow(nd)); }
+      return this._single ? (rows[0]||null) : rows;
+    }
+    async _runDelete(){
+      let q = fs.collection(this.table);
+      this.filters.forEach(([f,v]) => { q = q.where(f, '==', v); });
+      const snap = await q.get();
+      const batch = fs.batch(); snap.docs.forEach(d => batch.delete(d.ref)); await batch.commit();
+      return [];
+    }
+    async _run(){
+      try{
+        let data;
+        if(this.action==='select') data = await this._runSelect();
+        if(this.action==='insert') data = await this._runInsert();
+        if(this.action==='upsert') data = await this._runInsert();
+        if(this.action==='update') data = await this._runUpdate();
+        if(this.action==='delete') data = await this._runDelete();
+        return makeResult(data, null);
+      }catch(e){ console.error('Firebase bridge error:', e); return makeResult(null, e); }
+    }
+    then(resolve,reject){ return this._run().then(resolve,reject); }
+  }
+
+  window.createFirebaseSupabaseBridge = function(){
+    return {
+      from(table){ return new FireQuery(table); },
+      channel(){ return { on(){return this;}, subscribe(){return this;} }; },
+      storage: {
+        from(bucket){ return {
+          async upload(path,file,opt={}){ try{ if(!st) throw new Error('Firebase Storage disabled. Use Cloudinary/local image for now.'); const ref = st.ref().child(bucket+'/'+path); await ref.put(file); return {data:{path}, error:null}; }catch(e){ return {data:null,error:e}; } },
+          getPublicUrl(path){ return {data:{publicUrl:`https://firebasestorage.googleapis.com/v0/b/${FIREBASE_CONFIG.storageBucket}/o/${encodeURIComponent(bucket+'/'+path)}?alt=media`}}; },
+          async remove(paths){ try{ if(!st) return {data:true,error:null}; for(const p of paths||[]) await st.ref().child(bucket+'/'+p).delete(); return {data:true,error:null}; }catch(e){ return {data:null,error:e}; } }
+        }; }
+      }
+    };
+  };
+})();
+</script>
+
 
     <script>
         // SUPABASE CONNECTION
@@ -469,7 +594,7 @@
                 await loadPackingOrders();
             } catch (err) {
                 console.error(err);
-                showStatus('SUPABASE ERROR - CHECK SQL/POLICY', true);
+                showStatus('FIREBASE ERROR - CHECK CONFIG/RULES', true);
                 products = defaultProducts.map((x, idx) => ({...x, id: 'local-' + idx}));
                 sales = [];
                 renderMenu();
@@ -520,7 +645,7 @@
                 packingOrders = (data || []).map(o => ({ ...o, items: normaliseItems(o.items) }));
                 showStatus('PACKING SYNCED');
             } catch (err) {
-                console.warn('Packing Supabase fallback:', err);
+                console.warn('Packing Firebase fallback:', err);
                 packingOrders = readPackingLocal();
                 showStatus('PACKING LOCAL MODE', true);
             }
@@ -629,7 +754,7 @@
             let result;
             if (product.id && !String(product.id).startsWith('local-')) result = await db.from('products').update(clean).eq('id', product.id).select().single();
             else result = await db.from('products').insert(clean).select().single();
-            if (result.error) { console.error(result.error); showStatus('SAVE ERROR', true); alert('Cannot save to Supabase. Check table/policy.'); }
+            if (result.error) { console.error(result.error); showStatus('SAVE ERROR', true); alert('Cannot save to Firebase. Check Firebase config/rules.'); }
             else { Object.assign(product, result.data); showStatus('SAVED TO DASHBOARD'); }
         }
 
@@ -638,7 +763,7 @@
             for (const p of products) {
                 if (!p.id || String(p.id).startsWith('local-')) continue;
                 const { error } = await db.from('products').update({ brand: BRAND_NAME, brand_id: brandId, stock: Number(p.stock || 0), price: Number(p.price || 0), cost: Number(p.cost || 0), image_url: p.image_url || '', is_fries: Boolean(p.is_fries), priority: Number(p.priority ?? 9999), is_active: p.is_active !== false }).eq('id', p.id);
-                if (error) { console.error(error); showStatus('STOCK SAVE ERROR', true); alert('Cannot update stock in Supabase. Check table/policy.'); return; }
+                if (error) { console.error(error); showStatus('STOCK SAVE ERROR', true); alert('Cannot update stock in Supabase. Check Firebase config/rules.'); return; }
             }
             showStatus('STOCK SYNCED TO DASHBOARD');
         }
@@ -647,7 +772,7 @@
             const brandId = await getCrunchBrandId();
             const saleRow = { brand: BRAND_NAME, brand_id: brandId, receipt_no: sale.receipt_no, total: Number(sale.total || 0), total_amount: Number(sale.total || 0), payment_method: sale.method, method: sale.method, details: sale.details, profit: Number(sale.profit || 0), time: sale.time, date: sale.date };
             const { data, error } = await db.from('sales').insert(saleRow).select('id').single();
-            if (error) { console.error(error); showStatus('SALE SAVE ERROR', true); alert('Sale not saved to Supabase. Check table/policy.'); return null; }
+            if (error) { console.error(error); showStatus('SALE SAVE ERROR', true); alert('Sale not saved to Firebase. Check Firebase config/rules.'); return null; }
             const saleId = data.id;
             const items = (sale.items || []).map(i => ({ sale_id: saleId, product_id: i.pid || null, product_name: i.name, qty: Number(i.qty || 1), price: Number(i.price || 0), subtotal: Number(i.qty || 1) * Number(i.price || 0) }));
             if (items.length) await db.from('sales_items').insert(items);
