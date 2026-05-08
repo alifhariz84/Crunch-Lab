@@ -401,8 +401,8 @@ const FIREBASE_CONFIG = {
     eq(field,value){ this.filters.push([field,value]); return this; }
     order(field,opt={}){ this.orders.push([field, !!opt.ascending]); return this; }
     limit(n){ this._limit=n; return this; }
-    single(){ this._single=true; return this.then(r=>r.data); }
-    maybeSingle(){ this._maybe=true; return this.then(r=>r.data); }
+    single(){ this._single=true; return this; }
+    maybeSingle(){ this._maybe=true; return this; }
     insert(payload){ this.action='insert'; this.payload=payload; return this; }
     upsert(payload){ this.action='upsert'; this.payload=payload; return this; }
     update(payload){ this.action='update'; this.payload=payload; return this; }
@@ -494,7 +494,7 @@ const FIREBASE_CONFIG = {
         // Use project URL only. Do not use /rest/v1/ here.
         const SUPABASE_URL = "https://jtgiswzolnretpezfxpc.supabase.co";
         const SUPABASE_KEY = "sb_publishable_9m30QqCS2ttu9td6F84ogQ_JizwPY3v";
-        const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        const db = window.createFirebaseSupabaseBridge();
 
         const BRAND_NAME = 'Crunch Lab';
         let CRUNCH_BRAND_ID = null;
